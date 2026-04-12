@@ -1,6 +1,6 @@
 [project]
 name = "icebug"
-version = "12.4"
+version = "12.5"
 description = "High performance graph analytics backed by read-only memory"
 readme = "README.md"
 requires-python = ">=3.9"
