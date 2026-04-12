@@ -95,7 +95,7 @@ private:
 
     std::vector<double> communityVolumes;
 
-    std::vector<std::vector<node>> mappings;
+    std::vector<node> composedMapping;
 
     static constexpr int WORKING_SIZE = 1000;
 

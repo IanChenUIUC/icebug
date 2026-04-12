@@ -17,9 +17,9 @@ ParallelLeidenView::ParallelLeidenView(const Graph &graph, int iterations, bool 
 }
 
 ParallelLeidenView::~ParallelLeidenView() {
-    // Explicitly clear resources in proper order to avoid double-free
     currentCoarsenedView.reset();
-    mappings.clear();
+    composedMapping.clear();
+    composedMapping.shrink_to_fit();
     communityVolumes.clear();
 }
 
@@ -35,9 +35,13 @@ void ParallelLeidenView::run() {
         numberOfIterations--;
         changed = false;
 
+        // Initialize composed mapping to identity for this outer iteration
+        composedMapping.resize(G->numberOfNodes());
+        G->parallelForNodes([&](node u) { composedMapping[u] = u; });
+
         // Start with the original graph
         const Graph *currentGraph = G;
-        std::shared_ptr<CoarsenedGraphView> currentCoarsenedView = nullptr;
+        currentCoarsenedView.reset();
 
         Partition refined;
 
@@ -50,6 +54,8 @@ void ParallelLeidenView::run() {
 
         int innerIterations = 0;
         const int maxInnerIterations = 100; // Safety limit to prevent infinite loops
+        count lastNumCommunities = result.numberOfSubsets();
+        int stagnantCommunityIterations = 0;
         INFO("Starting inner loop with ", result.numberOfSubsets(), " communities");
         do {
             innerIterations++;
@@ -69,6 +75,11 @@ void ParallelLeidenView::run() {
 
             INFO("Inner iter ", innerIterations, ": moved ", nodesMoved, " nodes, ",
                  result.numberOfSubsets(), " communities");
+
+            if (nodesMoved == 0) {
+                INFO("No nodes moved in inner iter ", innerIterations, ", stopping");
+                break;
+            }
 
             // If each community consists of exactly one node we're done
             count numNodes = currentCoarsenedView ? currentCoarsenedView->numberOfNodes()
@@ -124,8 +135,9 @@ void ParallelLeidenView::run() {
                     p[newCoarseNode] = result[oldCoarseNode];
                 });
 
-                // Update mappings after using map
-                mappings.emplace_back(std::move(map));
+                // Since ppcView is always built from *G, map already represents
+                // original -> current-coarse directly. No chain composition needed.
+                composedMapping = std::move(map);
 
                 result = std::move(p);
                 currentCoarsenedView = newCoarsenedView;
@@ -140,17 +152,31 @@ void ParallelLeidenView::run() {
                 // Maintain Partition, add every coarse Node to the community its fine Nodes were in
                 Partition p(newCoarsenedView->numberOfNodes());
                 p.setUpperBound(result.upperBound());
-                // Capture map by value and other refs explicitly
                 currentGraph->parallelForNodes(
                     [map = map, &p, this](node u) { p[map[u]] = result[u]; });
 
-                mappings.emplace_back(std::move(map));
+                // ppcView is built from *G so map is already original -> coarse; just store it.
+                composedMapping = std::move(map);
                 result = std::move(p);
 
-                // Use the coarsened view for the next iteration
                 currentCoarsenedView = newCoarsenedView;
-                currentGraph = nullptr; // No longer using the original graph directly
+                currentGraph = nullptr;
             }
+
+            calculateVolumes(*currentCoarsenedView);
+
+            const count currentNumCommunities = result.numberOfSubsets();
+            if (currentNumCommunities == lastNumCommunities) {
+                ++stagnantCommunityIterations;
+                if (stagnantCommunityIterations >= 5) {
+                    INFO("No community-count progress for ", stagnantCommunityIterations,
+                         " inner iterations (communities=", currentNumCommunities, "), stopping");
+                    break;
+                }
+            } else {
+                stagnantCommunityIterations = 0;
+            }
+            lastNumCommunities = currentNumCommunities;
 
         } while (true);
 
@@ -197,29 +223,18 @@ void ParallelLeidenView::calculateVolumes(const GraphType &graph) {
 void ParallelLeidenView::flattenPartition() {
     auto timer = Aux::Timer();
     timer.start();
-    if (mappings.empty()) {
+    if (composedMapping.empty()) {
         return;
     }
-    // Create a new partition with size |V(G)| (the fine/bigger Graph)
+    // composedMapping[originalNode] = finalCoarseNode (already fully composed, no chain needed)
     Partition flattenedPartition(G->numberOfNodes());
     flattenedPartition.setUpperBound(result.upperBound());
-    int i = mappings.size() - 1;
-    std::vector<node> &lower = mappings[i--];
-    while (i >= 0) {
-        // iteratively "resolve" (i.e compose) mappings. Let "lower" be a mapping thats
-        // below "higher" in the hierarchy (i.e. of a later aggregation)
-        // If higher[index] = z and lower[z] = x then set higher[index] = x
-        std::vector<node> &upper = mappings[i--];
-        for (auto &idx : upper) {
-            idx = lower[idx];
-        }
-        lower = upper;
-    }
-    G->parallelForNodes([&](node a) { flattenedPartition[a] = result[lower[a]]; });
+    G->parallelForNodes([&](node a) { flattenedPartition[a] = result[composedMapping[a]]; });
     flattenedPartition.compact(true);
     result = flattenedPartition;
-    mappings.clear();
-    currentCoarsenedView.reset(); // Clear the current coarsened view
+    composedMapping.clear();
+    composedMapping.shrink_to_fit();
+    currentCoarsenedView.reset();
     TRACE("Flattening partition took " + timer.elapsedTag());
 }
 
