@@ -7,6 +7,7 @@ networkit_add_module(auxiliary
     Random.cpp
     SignalHandling.cpp
     Timer.cpp
+    RangeMinimumQuery.cpp
     )
 
 if(NOT WIN32)
