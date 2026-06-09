@@ -651,7 +651,7 @@ public:
     public:
         NeighborRange(const Graph &G, node u)
             : neighborBuffer(
-                std::make_shared<std::vector<node>>(G.getNeighborsVector(u, InEdges))) {}
+                  std::make_shared<std::vector<node>>(G.getNeighborsVector(u, InEdges))) {}
         NeighborRange() : neighborBuffer(std::make_shared<std::vector<node>>()) {}
 
         NeighborIterator begin() const { return NeighborIterator(neighborBuffer->begin()); }

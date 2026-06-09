@@ -91,6 +91,29 @@ Graph::Graph(count n, bool directed, std::shared_ptr<arrow::UInt64Array> outIndi
     }
 }
 
+template <typename T>
+std::shared_ptr<arrow::UInt64Array> vectorToArrow(std::vector<T> vec) {
+    if (vec.empty())
+        return nullptr;
+
+    int64_t length = vec.size();
+    int64_t byte_size = length * sizeof(T);
+
+    auto *heap_vec = new std::vector<T>(std::move(vec));
+    auto buffer = std::shared_ptr<arrow::Buffer>(
+        new arrow::Buffer(reinterpret_cast<const uint8_t *>(heap_vec->data()), byte_size),
+        [heap_vec](arrow::Buffer *b) {
+            delete b;
+            delete heap_vec;
+        });
+
+    return std::make_shared<arrow::UInt64Array>(length, buffer);
+}
+Graph::Graph(count n, bool directed, std::vector<node> outIndices, std::vector<index> outIndptr,
+             std::vector<node> inIndices, std::vector<index> inIndptr)
+    : Graph(n, directed, vectorToArrow(std::move(outIndices)), vectorToArrow(std::move(outIndptr)),
+            vectorToArrow(std::move(inIndices)), vectorToArrow(std::move(inIndptr))) {}
+
 /** PRIVATE HELPERS **/
 
 index Graph::indexInInEdgeArray(node v, node u) const {
