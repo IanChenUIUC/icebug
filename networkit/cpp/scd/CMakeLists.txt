@@ -13,6 +13,7 @@ networkit_add_module(scd
     SetConductance.cpp
     TwoPhaseL.cpp
     TCE.cpp
+    ShellStruct.cpp
     )
 
 networkit_module_link_modules(scd
