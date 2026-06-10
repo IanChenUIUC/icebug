@@ -5,6 +5,7 @@
  *      Author: Ian Chen (ianchen3@illinois.edu)
  */
 
+#include <bit>
 #include <networkit/Globals.hpp>
 #include <networkit/auxiliary/RangeMinimumQuery.hpp>
 
@@ -15,12 +16,12 @@ RangeMinimumQuery::RangeMinimumQuery(const std::vector<int64_t> &data)
     if (n == 0)
         return;
 
-    logn = std::__lg(n) + 1;
+    logn = std::bit_width(n);
     st.resize(n * logn);
     auto idx = [&](size_t i, size_t j) { return j * n + i; };
 
 #pragma omp parallel for
-    for (index i = 0; i < n; ++i)
+    for (NetworKit::omp_index i = 0; i < n; ++i)
         st[idx(i, 0)] = i;
 
     for (size_t j = 1; j < logn; ++j) {
@@ -28,7 +29,7 @@ RangeMinimumQuery::RangeMinimumQuery(const std::vector<int64_t> &data)
         index bound = n - (1ULL << j) + 1;
 
 #pragma omp parallel for
-        for (index i = 0; i < bound; ++i) {
+        for (NetworKit::omp_index i = 0; i < bound; ++i) {
             size_t left_idx = st[idx(i, j - 1)];
             size_t right_idx = st[idx(i + range_len, j - 1)];
 
@@ -46,7 +47,7 @@ index RangeMinimumQuery::Query(index leftRange, index rightRange) {
         return NetworKit::none;
 
     auto idx = [&](size_t i, size_t j) { return j * n + i; };
-    index j = std::__lg(rightRange - leftRange);
+    index j = std::bit_width(rightRange - leftRange) - 1;
     index range_len = 1ULL << j;
 
     index left_idx = st[idx(leftRange, j)];
