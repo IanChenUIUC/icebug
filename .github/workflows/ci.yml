@@ -189,7 +189,7 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
           sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
           sudo apt-get update
-          sudo apt-get install ninja-build libarrow-dev
+          sudo apt-get install ninja-build libarrow-dev libparquet-dev
       - name: Setup Python 3.13
         uses: actions/setup-python@v5
         with:
@@ -227,7 +227,7 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
           sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
           sudo apt-get update
-          sudo apt-get install clang-19 libomp-19-dev ninja-build libarrow-dev
+          sudo apt-get install clang-19 libomp-19-dev ninja-build libarrow-dev libparquet-dev
       - name: Checkout networkit
         uses: actions/checkout@v4
         with:
@@ -253,7 +253,7 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
           sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
           sudo apt-get update
-          sudo apt-get install libarrow-dev
+          sudo apt-get install libarrow-dev libparquet-dev
       - name: Checkout networkit
         uses: actions/checkout@v4
         with:
@@ -283,7 +283,7 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
           sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
           sudo apt-get update
-          sudo apt-get install python3.10 libomp-17-dev clang-17 clang-tidy-17 ninja-build libarrow-dev
+          sudo apt-get install python3.10 libomp-17-dev clang-17 clang-tidy-17 ninja-build libarrow-dev libparquet-dev
       - name: Checkout networkit
         uses: actions/checkout@v4
         with:
@@ -311,7 +311,10 @@ jobs:
             "name": "networkit-deps",
             "version": "1.0.0",
             "dependencies": [
-              "arrow"
+             {
+                "name": "arrow",
+                "features": ["parquet"]
+              }
             ]
           }
           EOF
