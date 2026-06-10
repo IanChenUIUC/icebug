@@ -31,7 +31,7 @@ static void forNeighborsOfSet(const Graph &G, std::span<const node> S, ProcessFu
     {
         LocalState local_state;
 #pragma omp for schedule(guided)
-        for (size_t i = 0; i < S.size(); ++i) {
+        for (omp_index i = 0; i < S.size(); ++i) {
             node v = S[i];
             G.forNeighborsOf(v, [&](node neighbor) { F(v, neighbor, local_state); });
         }
@@ -175,7 +175,7 @@ void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
         }
 
 #pragma omp parallel for schedule(static)
-        for (index i = 0; i < shell_size; ++i)
+        for (omp_index i = 0; i < shell_size; ++i)
             assignment_vec[V_k[i]] = new_ids[dsu.find(V_k[i])];
 
         // Phases 4: Builds the tree CSR (and the inverse assignment)
@@ -209,7 +209,7 @@ void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
     coreness_vec.push_back(0);
 
 #pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < shell_size_0; ++i)
+    for (omp_index i = 0; i < shell_size_0; ++i)
         assignment_vec[V_0[i]] = root;
 
     append_to_csr(
