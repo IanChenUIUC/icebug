@@ -1,3 +1,4 @@
+#include <atomic>
 #include <omp.h>
 #include <networkit/Globals.hpp>
 #include <networkit/structures/ConcurrentUnionFind.hpp>
@@ -18,15 +19,13 @@ index ConcurrentUnionFind<ReleaseConsistency>::find(index i) {
     while (1) {
         element p = parent[i].load(LoadOrder);
         if (p < 0) {
-            return i;
-        }
-
-        element gp = parent[p].load(LoadOrder);
-        if (gp < 0) {
-            return p;
+            // re-check using memory barriers
+            if ((p = parent[i].load(std::memory_order_acquire)) < 0)
+                return i;
         }
 
         // path halving
+        element gp = parent[p].load(LoadOrder);
         parent[i].store((element)gp, std::memory_order_relaxed);
         i = gp;
     }
@@ -50,10 +49,9 @@ bool ConcurrentUnionFind<ReleaseConsistency>::merge(index u, index v) {
             return false;
         }
 
-        element val_u = parent[root_u].load(LoadOrder);
-        element val_v = parent[root_v].load(LoadOrder);
-
         // both elements should be roots
+        element val_u = parent[root_u].load(std::memory_order_acquire);
+        element val_v = parent[root_v].load(std::memory_order_acquire);
         if (val_u >= 0 || val_v >= 0) {
             continue;
         }
@@ -72,6 +70,7 @@ bool ConcurrentUnionFind<ReleaseConsistency>::merge(index u, index v) {
                 element expected_rank = val_u;
                 while (expected_rank < 0
                        && !parent[root_u].compare_exchange_weak(expected_rank, expected_rank - 1,
+                                                                std::memory_order_relaxed,
                                                                 std::memory_order_relaxed)) {
                 }
             }
