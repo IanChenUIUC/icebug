@@ -11,6 +11,8 @@ from .base cimport _Algorithm, Algorithm
 from .structures cimport _Cover, Cover
 from .helpers import stdstring
 
+import os
+
 cdef class SelectiveCommunityDetector:
 	"""
 	Abstract base class for a selective community detector.
@@ -593,3 +595,75 @@ cdef class LocalT(SelectiveCommunityDetector):
 	def __cinit__(self, Graph G):
 		self._G = G
 		self._this = new _LocalT(dereference(G._this))
+
+cdef extern from "<networkit/scd/ShellStruct.hpp>":
+	cdef cppclass _ShellStruct "NetworKit::ShellStruct"(_SelectiveCommunityDetector):
+		_ShellStruct(const _Graph& G) except +
+
+		void build() except +
+		void save(string components_path, string tree_path, string compression) except +
+		void load(string components_path, string tree_path) except +
+
+cdef class ShellStruct(SelectiveCommunityDetector):
+	"""
+  	The ShellStruct index for fast online k-core community search.
+ 
+  	This is an implementation of the algorithm proposed in:
+ 
+  	Fang, Y., Cheng, C. K., Luo, S., & Hu, J. (2016).
+  	Effective community search for large attributed graphs.
+  	Proceedings of the VLDB Endowment.
+  	https://doi.org/10.14778/2994509.2994538
+
+    Parameters
+    ----------
+	G : networkit.Graph
+		Graph in which the community shell be found.
+	"""
+	def __cinit__(self, Graph G):
+		self._G = G
+		self._this = new _ShellStruct(dereference(G._this))
+
+	def build(self):
+		"""
+		build()
+
+		Initializes the ShellStruct.
+		"""
+		(<_ShellStruct*>(self._this)).build()
+
+	def save(self, components_path, tree_path, compression="ZSTD"):
+		"""
+		save()
+
+		Saves the shellstruct index to disk in .parquet files.
+
+		Parameters
+		----------
+		components_path : str
+			The assignment of vertices to components.
+     	tree_path : str
+     		The coreness, vertices, and child structure of the tree.
+     	compression : str
+		"""
+		components_path = os.fspath(components_path).encode("utf-8")
+		tree_path = os.fspath(tree_path).encode("utf-8")
+		(<_ShellStruct*>(self._this)).save(components_path, tree_path, compression.encode("utf-8"))
+
+	def load(self, components_path, tree_path):
+		"""
+		load()
+
+		Loads the shellstruct index from disk in .parquet files.
+
+		Parameters
+		----------
+		components_path : str
+			The assignment of vertices to components.
+     	tree_path : str
+     		The coreness, vertices, and child structure of the tree.
+		"""
+		components_path = os.fspath(components_path).encode("utf-8")
+		tree_path = os.fspath(tree_path).encode("utf-8")
+		(<_ShellStruct*>(self._this)).load(components_path, tree_path)
+

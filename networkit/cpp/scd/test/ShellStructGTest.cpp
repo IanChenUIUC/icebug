@@ -16,21 +16,21 @@ namespace NetworKit {
 class ShellStructGTest : public ::testing::Test {
 protected:
     GraphW getCliqueChain(const std::vector<count> &cliqueSizes) {
-        size_t totalNodes = 0;
-        for (size_t size : cliqueSizes)
+        count totalNodes = 0;
+        for (count size : cliqueSizes)
             totalNodes += size;
 
         GraphW g(totalNodes, false, false);
-        size_t start = 0;
-        for (size_t size : cliqueSizes) {
-            for (size_t u = start; u < start + size; ++u)
-                for (size_t v = u + 1; v < start + size; ++v)
+        count start = 0;
+        for (count size : cliqueSizes) {
+            for (count u = start; u < start + size; ++u)
+                for (count v = u + 1; v < start + size; ++v)
                     g.addEdge(u, v);
             start += size;
         }
 
         start = 0;
-        for (size_t i = 0; i < cliqueSizes.size() - 1; ++i) {
+        for (count i = 0; i < cliqueSizes.size() - 1; ++i) {
             start += cliqueSizes[i];
             g.addEdge(start - 1, start);
         }
@@ -38,20 +38,20 @@ protected:
         return g;
     }
 
-    std::set<node> gtSearch(const std::vector<size_t> &cliques, const std::set<node> &query) {
-        std::vector<size_t> boundaries;
-        size_t currentSum = 0;
-        for (size_t size : cliques) {
+    std::set<node> gtSearch(const std::vector<count> &cliques, const std::set<node> &query) {
+        std::vector<count> boundaries;
+        count currentSum = 0;
+        for (count size : cliques) {
             currentSum += size;
             boundaries.push_back(currentSum);
         }
 
-        size_t cMin = cliques.size();
-        size_t cMax = 0;
+        count cMin = cliques.size();
+        count cMax = 0;
 
         for (node q : query) {
-            size_t cIdx = 0;
-            for (size_t i = 0; i < boundaries.size(); ++i) {
+            count cIdx = 0;
+            for (count i = 0; i < boundaries.size(); ++i) {
                 if (q < boundaries[i]) {
                     cIdx = i;
                     break;
@@ -61,23 +61,23 @@ protected:
             cMax = std::max(cMax, cIdx);
         }
 
-        size_t bottleneckSize = cliques[cMin];
-        for (size_t i = cMin; i <= cMax; ++i)
+        count bottleneckSize = cliques[cMin];
+        for (count i = cMin; i <= cMax; ++i)
             bottleneckSize = std::min(bottleneckSize, cliques[i]);
 
-        int left = static_cast<int>(cMin);
+        count left = cMin;
         while (left > 0 && cliques[left - 1] >= bottleneckSize)
             left--;
 
-        int right = static_cast<int>(cMax);
-        while (right < static_cast<int>(cliques.size()) - 1 && cliques[right + 1] >= bottleneckSize)
+        count right = cMax;
+        while (right < cliques.size() - 1 && cliques[right + 1] >= bottleneckSize)
             right++;
 
-        size_t vBeg = (left > 0) ? boundaries[left - 1] : 0;
-        size_t vEnd = boundaries[right];
+        count vBeg = (left > 0) ? boundaries[left - 1] : 0;
+        count vEnd = boundaries[right];
 
         std::set<node> expectedCommunity;
-        for (size_t v = vBeg; v < vEnd; ++v) {
+        for (count v = vBeg; v < vEnd; ++v) {
             expectedCommunity.insert(static_cast<node>(v));
         }
 
