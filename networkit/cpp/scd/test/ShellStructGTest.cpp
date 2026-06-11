@@ -15,7 +15,7 @@ namespace NetworKit {
 
 class ShellStructGTest : public ::testing::Test {
 protected:
-    GraphW getCliqueChain(const std::vector<size_t> &cliqueSizes) {
+    GraphW getCliqueChain(const std::vector<count> &cliqueSizes) {
         size_t totalNodes = 0;
         for (size_t size : cliqueSizes)
             totalNodes += size;

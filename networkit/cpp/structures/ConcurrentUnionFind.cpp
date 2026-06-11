@@ -9,7 +9,7 @@ template <bool ReleaseConsistency>
 ConcurrentUnionFind<ReleaseConsistency>::ConcurrentUnionFind(index max_element)
     : parent(max_element) {
 #pragma omp parallel for schedule(static)
-    for (index i = 0; i < max_element; ++i) {
+    for (omp_index i = 0; i < max_element; ++i) {
         parent[i].store(-1, std::memory_order_relaxed);
     }
 }
@@ -18,14 +18,14 @@ template <bool ReleaseConsistency>
 index ConcurrentUnionFind<ReleaseConsistency>::find(index i) {
     while (1) {
         element p = parent[i].load(LoadOrder);
-        if (p < 0) {
-            // re-check using memory barriers
-            if ((p = parent[i].load(std::memory_order_acquire)) < 0)
-                return i;
-        }
+        if (p < 0 && (p = parent[i].load(std::memory_order_acquire)) < 0)
+            return i;
 
         // path halving
         element gp = parent[p].load(LoadOrder);
+        if (gp < 0 && (gp = parent[p].load(std::memory_order_acquire)) < 0)
+            return p;
+
         parent[i].store((element)gp, std::memory_order_relaxed);
         i = gp;
     }
