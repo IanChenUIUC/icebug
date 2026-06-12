@@ -725,6 +725,7 @@ cdef extern from "<networkit/scd/SteinerKCore.hpp>":
 
 	cdef cppclass _SteinerKCore "NetworKit::SteinerKCore"(_SelectiveCommunityDetector):
 		_SteinerKCore(_Graph &G, vector[node] &coreness) except +
+		vector[set[node]] run(const vector[set[node]] &s) except +
 
 cdef class SteinerKCore(SelectiveCommunityDetector):
 	"""
@@ -749,16 +750,33 @@ cdef class SteinerKCore(SelectiveCommunityDetector):
 
 		Detect one community for each of the given seed nodes.
 
-		The default implementation calls expandOneCommunity() for each of the seeds.
-
 		Parameters
 		----------
-		seeds : list(int)
+		seeds : list(set(int))
 			The list of seeds for which communities shall be detected.
 
 		Returns
 		-------
-		dict(int `:` int)
-			A dict mapping from seed node to community (as a set of nodes).
+		list(set `:` int)
+			A list of communities for each input seed.
 		"""
-		return self._this.run(seeds)
+		return (<_SteinerKCore*>self._this).run(<vector[set[node]]>seeds)
+
+cdef extern from "<networkit/scd/LocalKCore.hpp>":
+	cdef cppclass _LocalKCore "NetworKit::LocalKCore"(_SelectiveCommunityDetector):
+		_LocalKCore(_Graph G) except +
+
+cdef class LocalKCore(SelectiveCommunityDetector):
+	"""
+	LocalKCore(G)
+
+	The Local KCore algorithm.
+
+	Parameters
+	----------
+	G : networkit.Graph
+		Graph in which the community shell be found.
+	"""
+	def __cinit__(self, Graph G):
+		self._G = G
+		self._this = new _LocalKCore(dereference(G._this))

@@ -15,6 +15,7 @@ networkit_add_module(scd
     TCE.cpp
     ShellStruct.cpp
     SteinerKCore.cpp
+    LocalKCore.cpp
     )
 
 networkit_module_link_modules(scd
