@@ -106,6 +106,16 @@ public:
     std::pair<int64_t, index> extractMin() override;
 
     /**
+     * Returns the element on bot of the PrioQ.
+     */
+    std::pair<int64_t, index> getMax();
+
+    /**
+     * Removes the element with maximum key and returns the key-value pair.
+     */
+    std::pair<int64_t, index> extractMax();
+
+    /**
      * Modifies entry with value @a value.
      * The entry is then set to @a newKey with the same value.
      * If the corresponding key is not present, the element will be inserted.
