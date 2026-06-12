@@ -5,6 +5,7 @@ networkit_add_module(structures
     UnionFind.cpp
     ConcurrentUnionFind.cpp
     LeastCommonAncestor.cpp
+    UnionFindSubset.cpp
     )
 
 

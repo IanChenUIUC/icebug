@@ -117,6 +117,25 @@ std::pair<int64_t, index> BucketPQ::getMin() {
         return {currentMinKey, buckets[currentMinKey + offset].front()};
 }
 
+std::pair<int64_t, index> BucketPQ::extractMax() {
+    if (empty())
+        return {none, none};
+
+    index result = buckets[currentMaxKey + offset].front();
+
+    // store currentMaxKey because remove(result) will change it
+    int64_t oldMaxKey = currentMaxKey;
+    remove(result);
+    return {oldMaxKey, result};
+}
+
+std::pair<int64_t, index> BucketPQ::getMax() {
+    if (empty())
+        return {none, none};
+    else
+        return {currentMaxKey, buckets[currentMaxKey + offset].front()};
+}
+
 void BucketPQ::changeKey(int64_t newKey, index value) {
     remove(value);
     insert(newKey, value);
