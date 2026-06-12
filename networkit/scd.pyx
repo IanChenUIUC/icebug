@@ -667,3 +667,44 @@ cdef class ShellStruct(SelectiveCommunityDetector):
 		tree_path = os.fspath(tree_path).encode("utf-8")
 		(<_ShellStruct*>(self._this)).load(components_path, tree_path)
 
+cdef extern from "<networkit/scd/SteinerKCore.hpp>":
+
+	cdef cppclass _SteinerKCore "NetworKit::SteinerKCore"(_SelectiveCommunityDetector):
+		_SteinerKCore(_Graph &G, vector[node] &coreness) except +
+
+cdef class SteinerKCore(SelectiveCommunityDetector):
+	"""
+	SteinerKCore(G, coreness)
+
+	The Steiner KCore algorithm, for batched multi-set k-core community search queries.
+
+	Parameters
+	----------
+	G : networkit.Graph
+		Graph in which the community shell be found.
+	coreness: list[int]
+		Precalculated core numbers for each node.
+	"""
+	def __cinit__(self, Graph G, list[node] coreness):
+		self._G = G
+		self._this = new _SteinerKCore(dereference(G._this), coreness)
+
+	def run(self, list[set[node]] seeds):
+		"""
+		run(seeds):
+
+		Detect one community for each of the given seed nodes.
+
+		The default implementation calls expandOneCommunity() for each of the seeds.
+
+		Parameters
+		----------
+		seeds : list(int)
+			The list of seeds for which communities shall be detected.
+
+		Returns
+		-------
+		dict(int `:` int)
+			A dict mapping from seed node to community (as a set of nodes).
+		"""
+		return self._this.run(seeds)
