@@ -3,7 +3,9 @@
 from pathlib import Path
 
 import networkit as nk
-from networkit.scd import SteinerKCore
+from networkit.scd import SteinerKCore, LocalKCore
+
+nk.setLogLevel("INFO")
 
 
 def build_demo_graph():
@@ -23,19 +25,29 @@ def build_demo_graph():
 
 def main():
     graph, coreness = build_demo_graph()
+
+    print("====== Running SteinerKCore ========")
     commsearch = SteinerKCore(graph, coreness)
 
     seed = {0, 1, 2}
-    comm = commsearch.expandOneCommunity(seed)
-    print(comm)
-
+    print(f"{seed=}:", commsearch.expandOneCommunity(seed))
     seed = {4}
-    comm = commsearch.expandOneCommunity(seed)
-    print(comm)
-
+    print(f"{seed=}:", commsearch.expandOneCommunity(seed))
     seed = {2, 9}
-    comm = commsearch.expandOneCommunity(seed)
-    print(comm)
+    print(f"{seed=}:", commsearch.expandOneCommunity(seed))
+
+    comms = commsearch.run([{0, 1, 2}, {4}, {2, 9}])
+    print("Running all three as a batch:", comms)
+
+    print("====== Running LocalKCore ========")
+    commsearch = LocalKCore(graph)
+
+    seed = {0, 1, 2}
+    print(f"{seed=}:", commsearch.expandOneCommunity(seed))
+    seed = {4}
+    print(f"{seed=}:", commsearch.expandOneCommunity(seed))
+    seed = {2, 9}
+    print(f"{seed=}:", commsearch.expandOneCommunity(seed))
 
 
 if __name__ == "__main__":
