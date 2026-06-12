@@ -17,7 +17,7 @@ namespace NetworKit {
  *
  */
 class SteinerKCore : public SelectiveCommunityDetector {
-    const std::vector<count> &coreness;
+    std::vector<count> coreness;
 
 public:
     /**
