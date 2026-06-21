@@ -112,6 +112,9 @@ void PLP::run() {
         DEBUG("[DONE] LabelPropagation: iteration #", nIterations, " - updated ", nUpdated,
               " labels, time spent: ", runtime.elapsedTag());
 
+        auto sizes = result.subsetSizeMap();
+        this->giant.push_back(std::max(sizes.begin(), sizes.end()));
+        this->updated.push_back(nUpdated);
     } // end while
     hasRun = true;
 }
@@ -128,6 +131,16 @@ count PLP::numberOfIterations() {
 const std::vector<count> &PLP::getTiming() const {
     assureFinished();
     return this->timing;
+}
+
+const std::vector<count> &PLP::getUpdated() const {
+    assureFinished();
+    return this->updated;
+}
+
+const std::vector<count> &PLP::getGiant() const {
+    assureFinished();
+    return this->giant;
 }
 
 } /* namespace NetworKit */

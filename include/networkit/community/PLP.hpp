@@ -28,8 +28,10 @@ class PLP final : public CommunityDetectionAlgorithm {
 private:
     count updateThreshold = 0;
     count maxIterations;
-    count nIterations = 0;     //!< number of iterations in last run
-    std::vector<count> timing; //!< running times for each iteration
+    count nIterations = 0;      //!< number of iterations in last run
+    std::vector<count> timing;  //!< running times for each iteration
+    std::vector<count> updated; //!< number of node moves per iter
+    std::vector<count> giant;   //!< number of nodes in giant label
 
 public:
     /**
@@ -77,6 +79,8 @@ public:
      * @return The list of running times in milliseconds
      */
     const std::vector<count> &getTiming() const;
+    const std::vector<count> &getUpdated() const;
+    const std::vector<count> &getGiant() const;
 };
 
 } /* namespace NetworKit */
