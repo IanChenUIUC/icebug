@@ -834,6 +834,8 @@ cdef extern from "<networkit/community/PLP.hpp>":
 		_PLP(_Graph _G, _Partition baseClustering, count updateThreshold) except +
 		count numberOfIterations() except +
 		vector[count] &getTiming() except +
+		vector[count] &getUpdated() except +
+		vector[count] &getGiant() except +
 
 
 cdef class PLP(CommunityDetector):
@@ -904,6 +906,11 @@ cdef class PLP(CommunityDetector):
 			The list of running times in milliseconds.
 		"""
 		return (<_PLP*>(self._this)).getTiming()
+
+	def getUpdated(self):
+		return (<_PLP*>(self._this)).getUpdated()
+	def getGiant(self):
+		return (<_PLP*>(self._this)).getGiant()
 
 cdef extern from "<networkit/community/LFM.hpp>":
 

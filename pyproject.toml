@@ -39,9 +39,10 @@ dependencies = [
   "duckdb",
   "scipy",
   "numpy",
-  "pyarrow>=24.0.0,<25.0",
+  "pyarrow==23.0.0",
   "icebug-format>=1.0.0",
-  "pytest"
+  "pytest",
+  "sphinx-bootstrap-theme>=0.8.1",
 ]
 
 [project.optional-dependencies]

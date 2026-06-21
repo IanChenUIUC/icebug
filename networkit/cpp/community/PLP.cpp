@@ -113,7 +113,12 @@ void PLP::run() {
               " labels, time spent: ", runtime.elapsedTag());
 
         auto sizes = result.subsetSizeMap();
-        this->giant.push_back(std::max(sizes.begin(), sizes.end()));
+        count largest = std::max_element(
+                            sizes.begin(), sizes.end(),
+                            [](const std::pair<label, count> &p1,
+                               const std::pair<label, count> &p2) { return p1.second < p2.second; })
+                            ->second;
+        this->giant.push_back(largest);
         this->updated.push_back(nUpdated);
     } // end while
     hasRun = true;
