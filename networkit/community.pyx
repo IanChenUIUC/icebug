@@ -836,6 +836,7 @@ cdef extern from "<networkit/community/PLP.hpp>":
 		vector[count] &getTiming() except +
 		vector[count] &getUpdated() except +
 		vector[count] &getGiant() except +
+		void &setRandomness(bool p) except +
 
 
 cdef class PLP(CommunityDetector):
@@ -911,6 +912,8 @@ cdef class PLP(CommunityDetector):
 		return (<_PLP*>(self._this)).getUpdated()
 	def getGiant(self):
 		return (<_PLP*>(self._this)).getGiant()
+	def setRandomness(self, p):
+		return (<_PLP*>(self._this)).setRandomness(p)
 
 cdef extern from "<networkit/community/LFM.hpp>":
 

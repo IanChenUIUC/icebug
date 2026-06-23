@@ -26,6 +26,7 @@ namespace NetworKit {
 class PLP final : public CommunityDetectionAlgorithm {
 
 private:
+    bool random = false;
     count updateThreshold = 0;
     count maxIterations;
     count nIterations = 0;      //!< number of iterations in last run
@@ -79,8 +80,10 @@ public:
      * @return The list of running times in milliseconds
      */
     const std::vector<count> &getTiming() const;
+
     const std::vector<count> &getUpdated() const;
     const std::vector<count> &getGiant() const;
+    void setRandomness(bool p);
 };
 
 } /* namespace NetworKit */

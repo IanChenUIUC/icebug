@@ -74,7 +74,7 @@ void PLP::run() {
         // reset updated
         nUpdated = 0;
 
-        G->balancedParallelForNodes([&](node v) {
+        auto propagate = [&](node v) {
             if (!activeNodes[v] || G->degree(v) == 0)
                 return; // node is isolated
 
@@ -103,25 +103,31 @@ void PLP::run() {
             } else {
                 activeNodes[v] = false;
             }
-        });
+        };
 
         // for each while loop iteration...
+        if (this->random)
+            G->forNodesInRandomOrder(propagate);
+        else
+            G->balancedParallelForNodes(propagate);
 
         runtime.stop();
         this->timing.push_back(runtime.elapsedMilliseconds());
-        DEBUG("[DONE] LabelPropagation: iteration #", nIterations, " - updated ", nUpdated,
-              " labels, time spent: ", runtime.elapsedTag());
+        INFO("[DONE] LabelPropagation: iteration #", nIterations, " - updated ", nUpdated,
+             " labels, time spent: ", runtime.elapsedTag());
 
         auto sizes = result.subsetSizeMap();
-        count largest = std::max_element(
-                            sizes.begin(), sizes.end(),
-                            [](const std::pair<label, count> &p1,
-                               const std::pair<label, count> &p2) { return p1.second < p2.second; })
-                            ->second;
-        this->giant.push_back(largest);
+        count giant = 0;
+        for (auto const &[_, sz] : sizes)
+            giant = std::max(giant, sz);
+        this->giant.push_back(giant);
         this->updated.push_back(nUpdated);
     } // end while
     hasRun = true;
+}
+
+void PLP::setRandomness(bool p) {
+    this->random = p;
 }
 
 void PLP::setUpdateThreshold(count th) {
