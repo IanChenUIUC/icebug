@@ -106,10 +106,13 @@ void PLP::run() {
         };
 
         // for each while loop iteration...
-        if (this->random)
+        if (this->random) {
             G->forNodesInRandomOrder(propagate);
-        else
+            INFO("[INFO] LabelPropagation random order");
+        } else {
             G->balancedParallelForNodes(propagate);
+            INFO("[INFO] LabelPropagation in node order");
+        }
 
         runtime.stop();
         this->timing.push_back(runtime.elapsedMilliseconds());
