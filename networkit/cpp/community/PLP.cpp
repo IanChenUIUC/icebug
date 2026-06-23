@@ -74,6 +74,7 @@ void PLP::run() {
         // reset updated
         nUpdated = 0;
 
+        std::mt19937 rng(std::random_device{}());
         auto propagate = [&](node v) {
             if (!activeNodes[v] || G->degree(v) == 0)
                 return; // node is isolated
@@ -88,12 +89,32 @@ void PLP::run() {
             });
 
             // get heaviest label
-            label heaviest = std::max_element(labelWeights.begin(), labelWeights.end(),
-                                              [](const std::pair<label, edgeweight> &p1,
-                                                 const std::pair<label, edgeweight> &p2) {
-                                                  return p1.second < p2.second;
-                                              })
-                                 ->first;
+            label heaviest;
+
+            if (!this->random) {
+                heaviest = std::max_element(labelWeights.begin(), labelWeights.end(),
+                                            [](const std::pair<label, edgeweight> &p1,
+                                               const std::pair<label, edgeweight> &p2) {
+                                                return p1.second < p2.second;
+                                            })
+                               ->first;
+            } else {
+                edgeweight mw = 0;
+                count numTies = 0;
+                for (const auto &[lbl, weight] : labelWeights) {
+                    if (weight > mw) {
+                        mw = weight;
+                        heaviest = lbl;
+                        numTies = 1;
+                    } else if (weight == mw) {
+                        ++numTies;
+                        std::uniform_int_distribution<size_t> dist(1, numTies);
+                        if (dist(rng) == 1) {
+                            heaviest = lbl;
+                        }
+                    }
+                }
+            }
 
             if (result.subsetOf(v) != heaviest) { // UPDATE
                 result.moveToSubset(heaviest, v); // result[v] = heaviest;
