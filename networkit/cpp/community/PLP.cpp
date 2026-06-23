@@ -116,7 +116,8 @@ void PLP::run() {
                 }
             }
 
-            if (result.subsetOf(v) != heaviest) { // UPDATE
+            // if (result.subsetOf(v) != heaviest) { // UPDATE
+            if (labelWeights[result.subsetOf(v)] != labelWeights[heaviest]) { // RETENTION STRATEGY
                 result.moveToSubset(heaviest, v); // result[v] = heaviest;
 #pragma omp atomic
                 nUpdated += 1;
