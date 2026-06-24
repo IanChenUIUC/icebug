@@ -9,12 +9,7 @@
 #include <span>
 #include <stdexcept>
 
-#include <arrow/api.h>
-#include <arrow/array/builder_primitive.h>
-#include <arrow/io/file.h>
-#include <parquet/arrow/reader.h>
-#include <parquet/arrow/writer.h>
-#include <parquet/properties.h>
+#include "networkit/auxiliary/Vector2Arrow.hpp"
 #include <networkit/centrality/CoreDecomposition.hpp>
 #include <networkit/graph/BFS.hpp>
 #include <networkit/scd/SelectiveCommunityDetector.hpp>
@@ -22,7 +17,14 @@
 #include <networkit/structures/ConcurrentUnionFind.hpp>
 #include <networkit/structures/LeastCommonAncestor.hpp>
 
+#include <arrow/io/api.h>
+#include <arrow/ipc/api.h>
+#include <arrow/type_fwd.h>
+#include <arrow/util/compression.h>
+
 namespace NetworKit {
+
+using indptr = int64_t;
 
 template <typename LocalState, typename ProcessFunc, typename CombineFunc>
 static void forNeighborsOfSet(const Graph &G, std::span<const node> S, ProcessFunc F,
@@ -40,8 +42,8 @@ static void forNeighborsOfSet(const Graph &G, std::span<const node> S, ProcessFu
     }
 }
 
-template <typename KeyFunc, typename ValueFunc>
-static void append_to_csr(std::vector<index> &indptr, std::vector<node> &indices,
+template <typename KeyFunc, typename ValueFunc, typename Index>
+static void append_to_csr(std::vector<Index> &indptr, std::vector<node> &indices,
                           std::span<const node> items, size_t num_keys, KeyFunc key_func,
                           ValueFunc val_func) {
     if (num_keys == 0)
@@ -55,9 +57,9 @@ static void append_to_csr(std::vector<index> &indptr, std::vector<node> &indices
     indices.resize(start_pos + std::size(items));
 
     std::vector<size_t> write_offsets(num_keys);
-    index current_offset = start_pos;
+    Index current_offset = start_pos;
 
-    for (size_t i = 0; i < num_keys; ++i) {
+    for (Index i = 0; i < num_keys; ++i) {
         write_offsets[i] = current_offset;
         current_offset += counts[i];
         indptr.push_back(current_offset);
@@ -69,29 +71,19 @@ static void append_to_csr(std::vector<index> &indptr, std::vector<node> &indices
     }
 }
 
-ShellStruct::ShellStruct(const Graph &g) : SelectiveCommunityDetector(g) {}
+ShellStruct::ShellStruct(const Graph &g) : SelectiveCommunityDetector(g), built(false) {}
 
 void ShellStruct::build() {
     NetworKit::CoreDecomposition coredecomp(*g);
     coredecomp.run();
 
     const std::vector<double> &scores = coredecomp.scores();
-    auto *heap_vec = new std::vector<uint64_t>();
-    heap_vec->reserve(scores.size());
-    for (double s : scores) {
-        heap_vec->push_back(static_cast<uint64_t>(s));
-    }
+    auto vec = std::vector<uint64_t>();
+    vec.reserve(scores.size());
+    for (auto s : scores)
+        vec.push_back(static_cast<uint64_t>(s));
 
-    index bytes = heap_vec->size() * sizeof(uint64_t);
-    auto buffer = std::shared_ptr<arrow::Buffer>(
-        new arrow::Buffer(reinterpret_cast<const uint8_t *>(heap_vec->data()), bytes),
-        [heap_vec](arrow::Buffer *b) {
-            delete b;
-            delete heap_vec;
-        });
-
-    auto arrow_cores = std::make_shared<arrow::UInt64Array>(heap_vec->size(), buffer);
-    build(arrow_cores);
+    build(Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(vec));
 }
 
 void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
@@ -122,7 +114,7 @@ void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
 
     count next_id = 0;
     std::vector<node> tree_ids(n, none), tree_v, tree_c;
-    std::vector<index> tree_v_indptr = {0}, tree_c_indptr = {0};
+    std::vector<indptr> tree_v_indptr = {0}, tree_c_indptr = {0};
     std::vector<index> coreness_vec, assignment_vec(n, none);
     ConcurrentUnionFind dsu(n);
 
@@ -208,7 +200,6 @@ void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
     node root = next_id++;
     coreness_vec.push_back(0);
 
-#pragma omp parallel for schedule(static)
     for (omp_index i = 0; i < shell_size_0; ++i)
         assignment_vec[V_0[i]] = root;
 
@@ -218,47 +209,20 @@ void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
         tree_c_indptr, tree_c, forest_roots, 1, [&](node) { return 0; },
         [&](node child) { return child; });
 
-    // Final Phase: convert to member types (LLM generated)
+    // Final Phase: convert to member types
 
-    auto make_arrow_array = [](auto vec) {
-        using T = typename decltype(vec)::value_type;
-        int64_t length = vec.size();
-        int64_t byte_size = length * sizeof(T);
-
-        auto *heap_vec = new std::vector<T>(std::move(vec));
-        auto buffer = std::shared_ptr<arrow::Buffer>(
-            new arrow::Buffer(reinterpret_cast<const uint8_t *>(heap_vec->data()), byte_size),
-            [heap_vec](arrow::Buffer *b) {
-                delete b;
-                delete heap_vec;
-            });
-
-        if constexpr (sizeof(T) == 4 && std::is_signed_v<T>) {
-            return std::make_shared<arrow::Int32Array>(length, buffer);
-        } else if constexpr (sizeof(T) == 8 && std::is_signed_v<T>) {
-            return std::make_shared<arrow::Int64Array>(length, buffer);
-        } else if constexpr (sizeof(T) == 4 && std::is_unsigned_v<T>) {
-            return std::make_shared<arrow::UInt32Array>(length, buffer);
-        } else if constexpr (sizeof(T) == 8 && std::is_unsigned_v<T>) {
-            return std::make_shared<arrow::UInt64Array>(length, buffer);
-        } else {
-            throw std::runtime_error("Unsupported Arrow integer type");
-        }
-    };
-
-    treeIndptr = make_arrow_array(std::move(tree_c_indptr));
-    treeIndices = make_arrow_array(std::move(tree_c));
+    treeIndptr = Aux::vectorToArrow<indptr, arrow::UInt64Array>(tree_c_indptr);
+    treeIndices = Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(tree_c);
     tree = GraphR(next_id, true, treeIndices, treeIndptr);
     lca = std::make_unique<NetworKit::LeastCommonAncestor>(*tree, root);
 
-    std::vector<int64_t> offsets(tree_v_indptr.begin(), tree_v_indptr.end());
-    auto offsets_arr = make_arrow_array(std::move(offsets));
-    auto tree_v_arr = make_arrow_array(std::move(tree_v));
-
+    auto offsets_arr = Aux::vectorToArrow<indptr, arrow::Int64Array>(tree_v_indptr);
+    auto tree_v_arr = Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(tree_v);
     vertices = std::static_pointer_cast<arrow::LargeListArray>(
         arrow::LargeListArray::FromArrays(*offsets_arr, *tree_v_arr).ValueOrDie());
-    assignment = make_arrow_array(std::move(assignment_vec));
-    coreness = make_arrow_array(std::move(coreness_vec));
+
+    assignment = Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(assignment_vec);
+    coreness = Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(coreness_vec);
 
     // mark as built
     built = true;
@@ -266,7 +230,7 @@ void ShellStruct::build(const std::shared_ptr<arrow::UInt64Array> &coredecomp) {
 
 std::set<node> ShellStruct::expandOneCommunity(const std::set<node> &s) {
     if (!built)
-        throw std::invalid_argument("Need to build() or load() the shell struct");
+        throw std::runtime_error("Need to build() or load() the shell struct");
 
     std::vector<node> output;
     if (s.empty())
@@ -280,7 +244,7 @@ std::set<node> ShellStruct::expandOneCommunity(const std::set<node> &s) {
 
     const uint64_t *raw_v =
         std::static_pointer_cast<arrow::UInt64Array>(vertices->values())->raw_values();
-    const int64_t *raw_offsets = vertices->raw_value_offsets();
+    const indptr *raw_offsets = vertices->raw_value_offsets();
 
     Traversal::BFSfrom(*tree, ancestor, [&](node u) {
         output.insert(output.end(), raw_v + raw_offsets[u], raw_v + raw_offsets[u + 1]);
@@ -289,41 +253,53 @@ std::set<node> ShellStruct::expandOneCommunity(const std::set<node> &s) {
     return std::set<node>(output.begin(), output.end());
 }
 
-static parquet::WriterProperties::Builder writerPropsBuilder(const std::string &compression) {
-    parquet::WriterProperties::Builder b;
+static arrow::Result<arrow::ipc::IpcWriteOptions> makeIpcOptions(const std::string &compression) {
+    auto opts = arrow::ipc::IpcWriteOptions::Defaults();
+    arrow::Compression::type codec;
     if (compression == "ZSTD")
-        b.compression(parquet::Compression::ZSTD);
-    else if (compression == "SNAPPY")
-        b.compression(parquet::Compression::SNAPPY);
-    else if (compression == "GZIP")
-        b.compression(parquet::Compression::GZIP);
+        codec = arrow::Compression::ZSTD;
+    else if (compression == "LZ4")
+        codec = arrow::Compression::LZ4_FRAME;
     else if (compression == "NONE")
-        b.compression(parquet::Compression::UNCOMPRESSED);
+        return opts; // uncompressed default
     else
-        throw std::runtime_error("ShellStruct::save — unknown compression: " + compression);
-    return b;
+        return arrow::Status::Invalid("ShellStruct::save — unknown compression: " + compression);
+
+    ARROW_ASSIGN_OR_RAISE(auto c, arrow::util::Codec::Create(codec));
+    opts.codec = std::shared_ptr<arrow::util::Codec>(std::move(c));
+    return opts;
 }
 
 static arrow::Status writeTable(const std::shared_ptr<arrow::Table> &table, const std::string &path,
                                 const std::string &compression) {
     ARROW_ASSIGN_OR_RAISE(auto sink, arrow::io::FileOutputStream::Open(path));
-    auto writerProps = writerPropsBuilder(compression).build();
-    auto arrowProps = parquet::ArrowWriterProperties::Builder().store_schema()->build();
-    ARROW_RETURN_NOT_OK(parquet::arrow::WriteTable(*table, arrow::default_memory_pool(), sink,
-                                                   1 << 20, writerProps, arrowProps));
+    ARROW_ASSIGN_OR_RAISE(auto opts, makeIpcOptions(compression));
+    ARROW_ASSIGN_OR_RAISE(auto writer, arrow::ipc::MakeFileWriter(sink, table->schema(), opts));
+    ARROW_RETURN_NOT_OK(writer->WriteTable(*table));
+    ARROW_RETURN_NOT_OK(writer->Close());
     return sink->Close();
 }
 
 static arrow::Status readTable(const std::string &path, std::shared_ptr<arrow::Table> *out) {
     ARROW_ASSIGN_OR_RAISE(auto src, arrow::io::ReadableFile::Open(path));
-    std::unique_ptr<parquet::arrow::FileReader> reader;
-    ARROW_ASSIGN_OR_RAISE(reader, parquet::arrow::OpenFile(src, arrow::default_memory_pool()));
-    return reader->ReadTable(out);
+    ARROW_ASSIGN_OR_RAISE(auto reader, arrow::ipc::RecordBatchFileReader::Open(src));
+
+    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+    batches.reserve(reader->num_record_batches());
+    for (int i = 0; i < reader->num_record_batches(); ++i) {
+        auto result = reader->ReadRecordBatch(i);
+        if (!result.ok())
+            return result.status();
+        batches.push_back(std::move(result).ValueOrDie());
+    }
+
+    ARROW_ASSIGN_OR_RAISE(*out, arrow::Table::FromRecordBatches(reader->schema(), batches));
+    return arrow::Status::OK();
 }
 
 arrow::Status ShellStruct::saveInternal(const std::string &components_path,
                                         const std::string &tree_path,
-                                        const std::string &compression) {
+                                        const std::string &compression) const {
     {
         auto schema = arrow::schema({arrow::field("assignment", arrow::uint64())});
         auto table = arrow::Table::Make(schema, {assignment});
@@ -410,8 +386,8 @@ arrow::Status ShellStruct::loadInternal(const std::string &components_path,
             if (coreness->Value(v) == 0)
                 root = v;
 
-        GraphR nkTree(n, true, treeIndices, treeIndptr);
-        lca = std::make_unique<NetworKit::LeastCommonAncestor>(nkTree, root);
+        tree = GraphR(n, true, treeIndices, treeIndptr);
+        lca = std::make_unique<NetworKit::LeastCommonAncestor>(*tree, root);
     }
 
     built = true;
@@ -422,8 +398,8 @@ void ShellStruct::save(const std::string &components_path, const std::string &tr
                        const std::string &compression) const {
     if (!built)
         throw std::runtime_error("ShellStruct::save called before build()");
-    auto status =
-        const_cast<ShellStruct *>(this)->saveInternal(components_path, tree_path, compression);
+
+    auto status = saveInternal(components_path, tree_path, compression);
     if (!status.ok())
         throw std::runtime_error("ShellStruct::save failed: " + status.ToString());
 }

@@ -42,7 +42,7 @@ node LeastCommonAncestor::Query(std::span<const node> nodes) {
 
     index left = none, right = 0;
     for (node v : nodes) {
-        index pos = position[v];
+        index pos = position.at(v);
         if (pos < left)
             left = pos;
         if (pos >= right)
