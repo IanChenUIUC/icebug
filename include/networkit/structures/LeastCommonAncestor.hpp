@@ -31,7 +31,6 @@ using count = NetworKit::count;
 class LeastCommonAncestor {
 private:
     const Graph *g;
-    node root;
 
     Aux::RangeMinimumQuery rmq;
     std::vector<index> position;

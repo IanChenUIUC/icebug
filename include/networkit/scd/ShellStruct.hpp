@@ -44,7 +44,7 @@ private:
     std::unique_ptr<NetworKit::LeastCommonAncestor> lca;
 
     arrow::Status saveInternal(const std::string &components_path, const std::string &tree_path,
-                               const std::string &compression);
+                               const std::string &compression) const;
     arrow::Status loadInternal(const std::string &components_path, const std::string &tree_path);
 
 public:
