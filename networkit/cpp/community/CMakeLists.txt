@@ -43,7 +43,7 @@ networkit_add_module(community
 networkit_module_link_modules(community
     auxiliary coarsening components flow graph matching scd structures)
 
-add_library(networkit_parallel_leiden_modularity_extension SHARED
+add_library(networkit_parallel_leiden_modularity_extension MODULE
     ParallelLeidenModularityScoringExtension.cpp)
 target_include_directories(networkit_parallel_leiden_modularity_extension BEFORE PUBLIC
     "${PROJECT_SOURCE_DIR}/include")
@@ -52,7 +52,7 @@ set_target_properties(networkit_parallel_leiden_modularity_extension PROPERTIES
     CXX_STANDARD ${NETWORKIT_CXX_STANDARD}
     CXX_STANDARD_REQUIRED YES)
 
-add_library(networkit_parallel_leiden_cpm_extension SHARED
+add_library(networkit_parallel_leiden_cpm_extension MODULE
     ParallelLeidenCPMScoringExtension.cpp)
 target_include_directories(networkit_parallel_leiden_cpm_extension BEFORE PUBLIC
     "${PROJECT_SOURCE_DIR}/include")
@@ -60,5 +60,14 @@ set_target_properties(networkit_parallel_leiden_cpm_extension PROPERTIES
     OUTPUT_NAME "networkit_parallel_leiden_cpm_extension"
     CXX_STANDARD ${NETWORKIT_CXX_STANDARD}
     CXX_STANDARD_REQUIRED YES)
+
+install(
+    TARGETS networkit_parallel_leiden_modularity_extension
+    LIBRARY DESTINATION "${NETWORKIT_LIB_DEST}/networkit"
+)
+install(
+    TARGETS networkit_parallel_leiden_cpm_extension
+    LIBRARY DESTINATION "${NETWORKIT_LIB_DEST}/networkit"
+)
 
 add_subdirectory(test)
