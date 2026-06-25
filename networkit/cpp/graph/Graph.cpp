@@ -15,7 +15,6 @@
 #include <arrow/type_fwd.h>
 
 #include <networkit/auxiliary/Log.hpp>
-#include <networkit/auxiliary/Vector2Arrow.hpp>
 #include <networkit/graph/Graph.hpp>
 #include <networkit/graph/GraphTools.hpp>
 
@@ -92,13 +91,6 @@ Graph::Graph(count n, bool directed, std::shared_ptr<arrow::UInt64Array> outIndi
         }
     }
 }
-
-Graph::Graph(count n, bool directed, std::vector<node> outIndices, std::vector<index> outIndptr,
-             std::vector<node> inIndices, std::vector<index> inIndptr)
-    : Graph(n, directed, Aux::vectorToArrow<node, arrow::UInt64Array>(std::move(outIndices)),
-            Aux::vectorToArrow<node, arrow::UInt64Array>(std::move(outIndptr)),
-            Aux::vectorToArrow<node, arrow::UInt64Array>(std::move(inIndices)),
-            Aux::vectorToArrow<node, arrow::UInt64Array>(std::move(inIndptr))) {}
 
 /** PRIVATE HELPERS **/
 

@@ -11,6 +11,8 @@
 
 namespace Aux {
 
+using NetworKit::omp_index;
+
 RangeMinimumQuery::RangeMinimumQuery(const std::vector<int64_t> &data)
     : data(&data), n(data.size()), logn(0) {
     if (n == 0)
@@ -21,7 +23,7 @@ RangeMinimumQuery::RangeMinimumQuery(const std::vector<int64_t> &data)
     auto idx = [&](size_t i, size_t j) { return j * n + i; };
 
 #pragma omp parallel for
-    for (NetworKit::omp_index i = 0; i < n; ++i)
+    for (omp_index i = 0; i < static_cast<omp_index>(n); ++i)
         st[idx(i, 0)] = i;
 
     for (size_t j = 1; j < logn; ++j) {
@@ -29,7 +31,7 @@ RangeMinimumQuery::RangeMinimumQuery(const std::vector<int64_t> &data)
         index bound = n - (1ULL << j) + 1;
 
 #pragma omp parallel for
-        for (NetworKit::omp_index i = 0; i < bound; ++i) {
+        for (omp_index i = 0; i < static_cast<omp_index>(bound); ++i) {
             size_t left_idx = st[idx(i, j - 1)];
             size_t right_idx = st[idx(i + range_len, j - 1)];
 
