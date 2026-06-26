@@ -3,14 +3,14 @@
  *
  *  Created on: 06.25.2026
  *      Author: Ian Chen (ianchen3@illinois.edu)
- *
- *  Zero-copy induced subgraph.
  */
 
 #ifndef NETWORKIT_GRAPH_INDUCED_SUBGRAPH_VIEW_HPP_
 #define NETWORKIT_GRAPH_INDUCED_SUBGRAPH_VIEW_HPP_
 
-#include <networkit/graph/Graph.hpp>
+#include <set>
+
+#include <networkit/graph/GraphR.hpp>
 
 namespace NetworKit {
 
@@ -20,18 +20,36 @@ namespace NetworKit {
  *
  * This class provides a memory-efficient graph view into a
  * base graph, providing the same interface.
- * Nodes can be added and removed efficiently.
+ * Nodes can be added or removed as a batch.
  *
  * A mutable GraphW can be realized.
+ * Neighbors are computed on-the-fly.
  */
-class InducedSubgraphView : public Graph {
+class InducedSubgraphView final : public GraphR {
+    const Graph &originalGraph;
+    std::set<node> nodeSubset;
+
+    count inducedNumberOfEdges = 0;
+    count inducedNumberOfSelfLoops = 0;
+    std::vector<count> inducedDegree;
+
 public:
     /**
      * Construct an induced subgraph view from the original graph and the node subset.
      * @param originalGraph The original CSR graph
      * @param subset The defining nodes of the induced subgraph.
      */
-    InducedSubgraphView(const Graph &originalGraph, std::vector<node> subset);
+    InducedSubgraphView(const Graph &originalGraph, std::set<node> subset);
+
+    /**
+     * Add nodes to the subset.
+     */
+    void AddNodes(const std::set<node> &subset);
+
+    /**
+     * Remove nodes from the subset.
+     */
+    void RemoveNodes(const std::set<node> &subset);
 
     /**
      * Construct an explicit mutable subgraph equivalent to this view.
@@ -41,12 +59,12 @@ public:
     /**
      * Copy constructor
      */
-    InducedSubgraphView(const InducedSubgraphView &other) : Graph(other) {}
+    InducedSubgraphView(const InducedSubgraphView &other) = default;
 
     /**
      * Move constructor
      */
-    InducedSubgraphView(InducedSubgraphView &&other) noexcept : Graph(std::move(other)) {}
+    InducedSubgraphView(InducedSubgraphView &&other) noexcept = default;
 
     /**
      * Copy assignment
@@ -67,11 +85,16 @@ public:
     /** Default destructor */
     ~InducedSubgraphView() override = default;
 
+    // Override from Graph base
+    bool hasNode(node v) const noexcept;
+    count numberOfNodes() noexcept;
+    count numberOfEdges() noexcept;
+    count numberOfSelfLoops() noexcept;
+
     // Implement pure virtual methods from Graph base class
 
     count degree(node v) const override;
     count degreeIn(node v) const override;
-    bool isIsolated(node v) const override;
 
     /**
      * Return edge weight of edge {@a u,@a v}. Returns 0 if edge does not
