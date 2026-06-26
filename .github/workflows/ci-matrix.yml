@@ -26,6 +26,7 @@ jobs:
   build:
     name: "${{ matrix.os }} (${{ matrix.compiler }})"
     runs-on: ${{ matrix.runner }}
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       fail-fast: false
       matrix:
