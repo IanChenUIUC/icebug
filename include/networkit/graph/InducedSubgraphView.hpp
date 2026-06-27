@@ -25,36 +25,52 @@ namespace NetworKit {
  * A mutable GraphW can be realized.
  * Neighbors are computed on-the-fly.
  */
-class InducedSubgraphView final : public GraphR {
+class InducedSubgraphView : public Graph {
     const Graph &originalGraph;
-    std::set<node> nodeSubset;
+    std::set<node> nodeSubset; // all nodes guaranteed to be in the original graph
 
-    count inducedNumberOfEdges = 0;
-    count inducedNumberOfSelfLoops = 0;
+    // store the induced degrees of all nodes in originalGraph for fast access
+    // for nodes not in nodeSubset, may contain garbage
     std::vector<count> inducedDegree;
+    std::vector<count> inducedInDegree;
+
+protected:
+    // count n;
+    // count m;
+    // count storedNumberOfSelfLoops;
+    // bool weighted;
+    // bool directed;
 
 public:
     /**
      * Construct an induced subgraph view from the original graph and the node subset.
      * @param originalGraph The original CSR graph
      * @param subset The defining nodes of the induced subgraph.
+     *
+     * Note: directed graphs are not yet supported.
      */
-    InducedSubgraphView(const Graph &originalGraph, std::set<node> subset);
+    InducedSubgraphView(const Graph &originalGraph, const std::set<node> &subset);
 
     /**
      * Add nodes to the subset.
      */
-    void AddNodes(const std::set<node> &subset);
+    void addNode(node u) { addNodes({u}); }
+    void addNodes(const std::set<node> &subset);
 
     /**
      * Remove nodes from the subset.
      */
-    void RemoveNodes(const std::set<node> &subset);
+    void removeNodes(const std::set<node> &subset);
+
+    /**
+     * Find all nodes that have source inside the subgraph view, and outNeighbor outside.
+     */
+    std::set<node> boundary();
 
     /**
      * Construct an explicit mutable subgraph equivalent to this view.
      */
-    GraphW Realize() const;
+    GraphW realize() const;
 
     /**
      * Copy constructor
@@ -85,30 +101,27 @@ public:
     /** Default destructor */
     ~InducedSubgraphView() override = default;
 
-    // Override from Graph base
-    bool hasNode(node v) const noexcept;
-    count numberOfNodes() noexcept;
-    count numberOfEdges() noexcept;
-    count numberOfSelfLoops() noexcept;
-
-    // Implement pure virtual methods from Graph base class
-
-    count degree(node v) const override;
-    count degreeIn(node v) const override;
+    /**
+     * Access the current nodes that are in the graph.
+     */
+    const std::set<node> &getNodeSubset() const noexcept { return nodeSubset; };
 
     /**
-     * Return edge weight of edge {@a u,@a v}. Returns 0 if edge does not
-     * exist. If weights are provided during construction, returns the actual
-     * edge weight; otherwise returns defaultEdgeWeight (1.0).
-     *
-     * @param u Endpoint of edge.
-     * @param v Endpoint of edge.
-     * @return Edge weight of edge {@a u,@a v} or 0 if edge does not exist.
+     * Access the underlying graph.
      */
+    const Graph &getOriginalGraph() const noexcept { return originalGraph; };
+
+    // Override from Graph base
+    count degree(node v) const override;
+    count degreeIn(node v) const override;
+    bool isIsolated(node v) const override;
+
+    bool hasNode(node v) const noexcept;
+    bool hasEdge(node u, node v) const noexcept;
     edgeweight weight(node u, node v) const override;
 
+    // FIXME: NOT PLANNED TO IMPLEMENT
     edgeid edgeId(node u, node v) const override;
-
     node getIthNeighbor(Unsafe, node u, index i) const override;
     edgeweight getIthNeighborWeight(node u, index i) const override;
     node getIthNeighbor(node u, index i) const override;
@@ -121,8 +134,38 @@ protected:
     std::pair<std::vector<node>, std::vector<edgeweight>>
     getNeighborsWithWeightsVector(node u, bool inEdges = false) const override;
 
+    // FIXME: NOT PLANNED TO IMPLEMENT
     index indexInInEdgeArray(node v, node u) const override;
     index indexInOutEdgeArray(node u, node v) const override;
+
+private:
+    /**
+     * @brief Virtual method for edge iteration
+     */
+    void
+    forEdgesVirtualImpl(bool directed, bool weighted, bool hasEdgeIds,
+                        std::function<void(node, node, edgeweight, edgeid)> handle) const override;
+
+    /**
+     * @brief Virtual method for forEdgesOf
+     */
+    void forEdgesOfVirtualImpl(
+        node u, bool directed, bool weighted, bool hasEdgeIds,
+        std::function<void(node, node, edgeweight, edgeid)> handle) const override;
+
+    /**
+     * @brief Virtual method for forInEdgesOf
+     */
+    void forInEdgesVirtualImpl(
+        node u, bool directed, bool weighted, bool hasEdgeIds,
+        std::function<void(node, node, edgeweight, edgeid)> handle) const override;
+
+    /**
+     * @brief Virtual method for parallelSumForEdges
+     */
+    double parallelSumForEdgesVirtualImpl(
+        bool directed, bool weighted, bool hasEdgeIds,
+        std::function<double(node, node, edgeweight, edgeid)> handle) const override;
 };
 
 } // namespace NetworKit
