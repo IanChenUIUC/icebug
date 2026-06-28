@@ -8,9 +8,12 @@
 #ifndef NETWORKIT_GRAPH_INDUCED_SUBGRAPH_VIEW_HPP_
 #define NETWORKIT_GRAPH_INDUCED_SUBGRAPH_VIEW_HPP_
 
+#include <map>
 #include <set>
 
 #include <networkit/graph/GraphR.hpp>
+
+// TODO: add an option to make the IDs contiguous
 
 namespace NetworKit {
 
@@ -31,8 +34,8 @@ class InducedSubgraphView : public Graph {
 
     // store the induced degrees of all nodes in originalGraph for fast access
     // for nodes not in nodeSubset, may contain garbage
-    std::vector<count> inducedDegree;
-    std::vector<count> inducedInDegree;
+    std::map<node, count> inducedDegree;
+    std::map<node, count> inducedInDegree;
 
 protected:
     // count n;
@@ -46,8 +49,6 @@ public:
      * Construct an induced subgraph view from the original graph and the node subset.
      * @param originalGraph The original CSR graph
      * @param subset The defining nodes of the induced subgraph.
-     *
-     * Note: directed graphs are not yet supported.
      */
     InducedSubgraphView(const Graph &originalGraph, const std::set<node> &subset);
 
@@ -60,6 +61,7 @@ public:
     /**
      * Remove nodes from the subset.
      */
+    void removeNode(node u) { removeNodes({u}); }
     void removeNodes(const std::set<node> &subset);
 
     /**
@@ -69,8 +71,9 @@ public:
 
     /**
      * Construct an explicit mutable subgraph equivalent to this view.
+     * @param compact; whether the subgraph should get compact node IDs
      */
-    GraphW realize() const;
+    GraphW realize(bool compact = false) const;
 
     /**
      * Copy constructor
@@ -115,6 +118,8 @@ public:
     count degree(node v) const override;
     count degreeIn(node v) const override;
     bool isIsolated(node v) const override;
+    edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
+    edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
 
     bool hasNode(node v) const noexcept;
     bool hasEdge(node u, node v) const noexcept;
@@ -166,6 +171,18 @@ private:
     double parallelSumForEdgesVirtualImpl(
         bool directed, bool weighted, bool hasEdgeIds,
         std::function<double(node, node, edgeweight, edgeid)> handle) const override;
+
+    /**
+     * Computes the weighted in/out degree of node @a u.
+     *
+     * @param u Node.
+     * @param inDegree whether to compute the in degree or the out degree.
+     * @param countSelfLoopsTwice If set to true, self-loops will be counted twice.
+     *
+     * @return Weighted in/out degree of node @a u.
+     */
+    edgeweight computeWeightedDegree(node u, bool inDegree = false,
+                                     bool countSelfLoopsTwice = false) const;
 };
 
 } // namespace NetworKit
