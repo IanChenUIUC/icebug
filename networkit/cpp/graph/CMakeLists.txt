@@ -5,6 +5,7 @@ networkit_add_module(graph
     GraphBuilder.cpp
     GraphTools.cpp
     GraphW.cpp
+    InducedSubgraphView.cpp
     KruskalMSF.cpp
     PrimMSF.cpp
     RandomMaximumSpanningForest.cpp
