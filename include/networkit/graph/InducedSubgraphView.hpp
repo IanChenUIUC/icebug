@@ -123,6 +123,21 @@ public:
     // For support of API: NetworKit::Graph::NodeRange
     using NodeRange = NodeRangeBase<InducedSubgraphView>;
 
+    // For support of API: NetworKit::Graph:EdgeIterator
+    using EdgeIterator = EdgeTypeIterator<Graph, Edge>;
+    // For support of API: NetworKit::Graph:EdgeWeightIterator
+    using EdgeWeightIterator = EdgeTypeIterator<Graph, WeightedEdge>;
+    // For support of API: NetworKit::Graph:EdgeRange
+    using EdgeRange = EdgeTypeRange<Graph, Edge>;
+    // For support of API: NetworKit::Graph:EdgeWeightRange
+    using EdgeWeightRange = EdgeTypeRange<Graph, WeightedEdge>;
+
+    // For support of API: NetworKit::Graph::NeighborIterator;
+    using NeighborIterator = NeighborIteratorBase<std::vector<node>>;
+    // For support of API: NetworKit::Graph::NeighborIterator;
+    using NeighborWeightIterator =
+        NeighborWeightIteratorBase<std::vector<node>, std::vector<edgeweight>>;
+
     /**
      * Get an iterable range over the nodes of the graph.
      *

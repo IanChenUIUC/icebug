@@ -174,7 +174,10 @@ InducedSubgraphView::getNeighborsWithWeightsVector(node u, bool inEdges) const {
     auto cb = [&](node v) {
         if (hasNode(v)) {
             nodeVec.push_back(v);
-            weightVec.push_back(weight(u, v));
+            if (inEdges)
+                weightVec.push_back(weight(v, u));
+            else
+                weightVec.push_back(weight(u, v));
         }
     };
 
@@ -194,8 +197,10 @@ InducedSubgraphView::getNeighborsWithWeightsVector(node u, bool inEdges) const {
 void InducedSubgraphView::forEdgesVirtualImpl(
     bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
-    for (node u : nodeSubset)
-        forEdgesOfVirtualImpl(u, directed, weighted, hasEdgeIds, handle);
+    originalGraph.get().forEdges([&](node u, node v, edgeweight w, edgeid x) {
+        if (hasEdge(u, v))
+            handle(u, v, w, x);
+    });
 }
 
 void InducedSubgraphView::forEdgesOfVirtualImpl(
