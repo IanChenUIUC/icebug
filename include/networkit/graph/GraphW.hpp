@@ -958,7 +958,7 @@ private:
     /**
      * @brief Override for vector-based forInEdgesOf
      */
-    void forInEdgesVirtualImpl(
+    void forInEdgesOfVirtualImpl(
         node u, bool directed, bool weighted, bool hasEdgeIds,
         std::function<void(node, node, edgeweight, edgeid)> handle) const override;
 
@@ -999,7 +999,7 @@ public:
     public:
         NeighborRange(const GraphW &G, node u) : G(&G), u(u) { assert(G.hasNode(u)); };
 
-        NeighborRange() : G(nullptr){};
+        NeighborRange() : G(nullptr) {};
 
         NeighborIterator begin() const {
             assert(G);
@@ -1037,7 +1037,7 @@ public:
     public:
         NeighborWeightRange(const GraphW &G, node u) : G(&G), u(u) { assert(G.hasNode(u)); };
 
-        NeighborWeightRange() : G(nullptr){};
+        NeighborWeightRange() : G(nullptr) {};
 
         NeighborWeightIterator begin() const {
             assert(G);
