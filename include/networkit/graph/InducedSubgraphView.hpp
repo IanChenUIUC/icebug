@@ -29,7 +29,7 @@ namespace NetworKit {
  * Neighbors are computed on-the-fly.
  */
 class InducedSubgraphView : public Graph {
-    const Graph &originalGraph;
+    std::reference_wrapper<const Graph> originalGraph;
     std::set<node> nodeSubset; // all nodes guaranteed to be in the original graph
 
     // store the induced degrees of all nodes in originalGraph for fast access
@@ -78,12 +78,16 @@ public:
     /**
      * Copy constructor
      */
-    InducedSubgraphView(const InducedSubgraphView &other) = default;
+    InducedSubgraphView(const InducedSubgraphView &other)
+        : Graph(other, true), originalGraph(other.originalGraph), nodeSubset(other.nodeSubset),
+          inducedDegree(other.inducedDegree), inducedInDegree(other.inducedInDegree) {}
 
     /**
      * Move constructor
      */
-    InducedSubgraphView(InducedSubgraphView &&other) noexcept = default;
+    InducedSubgraphView(const InducedSubgraphView &&other) noexcept
+        : Graph(other, true), originalGraph(other.originalGraph), nodeSubset(other.nodeSubset),
+          inducedDegree(other.inducedDegree), inducedInDegree(other.inducedInDegree) {}
 
     /**
      * Copy assignment
@@ -114,12 +118,91 @@ public:
      */
     const Graph &getOriginalGraph() const noexcept { return originalGraph; };
 
+    // For support of API: NetworKit::Graph::NodeIterator
+    using NodeIterator = NodeIteratorBase<InducedSubgraphView>;
+    // For support of API: NetworKit::Graph::NodeRange
+    using NodeRange = NodeRangeBase<InducedSubgraphView>;
+
+    /**
+     * Get an iterable range over the nodes of the graph.
+     *
+     * @return Iterator range over the nodes of the graph.
+     */
+    NodeRange nodeRange() const noexcept { return NodeRange(*this); }
+
+    /**
+     * Iterate over all nodes of the graph and call @a handle (lambda
+     * closure).
+     *
+     * @param handle Takes parameter <code>(node)</code>.
+     */
+    template <typename L>
+    void forNodes(L handle) const;
+
+    /**
+     * Iterate randomly over all nodes of the graph and call @a handle (lambda
+     * closure).
+     *
+     * @param handle Takes parameter <code>(node)</code>.
+     */
+    template <typename L>
+    void parallelForNodes(L handle) const;
+
+    /** Iterate over all nodes of the graph and call @a handle (lambda
+     * closure) as long as @a condition remains true. This allows for breaking
+     * from a node loop.
+     *
+     * @param condition Returning <code>false</code> breaks the loop.
+     * @param handle Takes parameter <code>(node)</code>.
+     */
+    template <typename C, typename L>
+    void forNodesWhile(C condition, L handle) const;
+
+    /**
+     * Iterate randomly over all nodes of the graph and call @a handle (lambda
+     * closure).
+     *
+     * @param handle Takes parameter <code>(node)</code>.
+     */
+    template <typename L>
+    void forNodesInRandomOrder(L handle) const;
+
+    /**
+     * Iterate in parallel over all nodes of the graph and call handler
+     * (lambda closure). Using schedule(guided) to remedy load-imbalances due
+     * to e.g. unequal degree distribution.
+     *
+     * @param handle Takes parameter <code>(node)</code>.
+     */
+    template <typename L>
+    void balancedParallelForNodes(L handle) const;
+
+    /**
+     * Iterate over all undirected pairs of nodes and call @a handle (lambda
+     * closure).
+     *
+     * @param handle Takes parameters <code>(node, node)</code>.
+     */
+    template <typename L>
+    void forNodePairs(L handle) const;
+
+    /**
+     * Iterate over all undirected pairs of nodes in parallel and call @a
+     * handle (lambda closure).
+     *
+     * @param handle Takes parameters <code>(node, node)</code>.
+     */
+    template <typename L>
+    void parallelForNodePairs(L handle) const;
+
     // Override from Graph base
     count degree(node v) const override;
     count degreeIn(node v) const override;
     bool isIsolated(node v) const override;
     edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
     edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
+
+    index upperNodeIdBound() const noexcept;
 
     bool hasNode(node v) const noexcept;
     bool hasEdge(node u, node v) const noexcept;
@@ -184,6 +267,123 @@ private:
     edgeweight computeWeightedDegree(node u, bool inDegree = false,
                                      bool countSelfLoopsTwice = false) const;
 };
+
+/**
+ * Class to iterate over the nodes of a graph.
+ * Specialized for the InducedSubgraphView.
+ */
+template <>
+class NodeIteratorBase<InducedSubgraphView> {
+    const InducedSubgraphView *G;
+    std::set<node>::iterator iter;
+
+public:
+    // The value type of the nodes (i.e. nodes). Returned by
+    // operator*().
+    using value_type = node;
+
+    // Reference to the value_type, required by STL.
+    using reference = value_type &;
+
+    // Pointer to the value_type, required by STL.
+    using pointer = value_type *;
+
+    // STL iterator category.
+    using iterator_category = std::forward_iterator_tag;
+
+    // Signed integer type of the result of subtracting two pointers,
+    // required by STL.
+    using difference_type = ptrdiff_t;
+
+    // Own type.
+    using self = NodeIteratorBase;
+
+    NodeIteratorBase(const InducedSubgraphView *G, node u)
+        : G(G), iter(G->getNodeSubset().lower_bound(u)) {}
+
+    /**
+     * @brief WARNING: This constructor is required for Python and should not be used as the
+     * iterator is not initialized.
+     */
+    NodeIteratorBase() : G(nullptr) {}
+
+    ~NodeIteratorBase() = default;
+
+    NodeIteratorBase &operator++() {
+        assert(iter != G->getNodeSubset().end());
+        ++iter;
+        return *this;
+    }
+
+    NodeIteratorBase operator++(int) {
+        const auto tmp = *this;
+        ++(*this);
+        return tmp;
+    }
+
+    NodeIteratorBase &operator--() {
+        assert(iter != G->getNodeSubset().begin());
+        --iter;
+        return *this;
+    }
+
+    NodeIteratorBase operator--(int) {
+        const auto tmp = *this;
+        --(*this);
+        return tmp;
+    }
+
+    bool operator==(const NodeIteratorBase &rhs) const noexcept { return iter == rhs.iter; }
+
+    bool operator!=(const NodeIteratorBase &rhs) const noexcept { return !(*this == rhs); }
+
+    node operator*() const noexcept {
+        assert(iter != G->getNodeSubset().end());
+        return *iter;
+    }
+};
+
+template <typename L>
+void InducedSubgraphView::forNodes(L handle) const {
+    for (auto it = nodeSubset.begin(); it != nodeSubset.end(); ++it)
+        handle(*it);
+}
+
+template <typename C, typename L>
+void InducedSubgraphView::forNodesWhile(C condition, L handle) const {
+    for (auto it = nodeSubset.begin(); it != nodeSubset.end() && !condition(); ++it)
+        handle(*it);
+}
+
+template <typename L>
+void InducedSubgraphView::forNodesInRandomOrder(L handle) const {
+    std::vector<node> randVec(nodeSubset.begin(), nodeSubset.end());
+    std::ranges::shuffle(randVec, Aux::Random::getURNG());
+    for (node v : randVec)
+        handle(v);
+}
+
+template <typename L>
+void InducedSubgraphView::forNodePairs(L handle) const {
+    for (auto it1 = nodeSubset.begin(); it1 != nodeSubset.end(); ++it1)
+        for (auto it2 = std::next(it1); it2 != nodeSubset.end(); ++it2)
+            handle(*it1, *it2);
+}
+
+template <typename L>
+void InducedSubgraphView::parallelForNodes(L handle) const {
+    throw std::runtime_error("parallelForNodes not implemented for InducedSubgraphView");
+}
+
+template <typename L>
+void InducedSubgraphView::balancedParallelForNodes(L handle) const {
+    throw std::runtime_error("balancedParallelForNodes not implemented for InducedSubgraphView");
+}
+
+template <typename L>
+void InducedSubgraphView::parallelForNodePairs(L handle) const {
+    throw std::runtime_error("parallelForNodePairs not implemented for InducedSubgraphView");
+}
 
 } // namespace NetworKit
 

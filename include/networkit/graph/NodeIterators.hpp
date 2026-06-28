@@ -72,7 +72,7 @@ public:
         return tmp;
     }
 
-    NodeIteratorBase operator--() {
+    NodeIteratorBase &operator--() {
         assert(u);
         do {
             --u;

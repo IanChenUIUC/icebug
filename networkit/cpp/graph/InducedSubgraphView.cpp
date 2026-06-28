@@ -24,7 +24,7 @@ InducedSubgraphView::InducedSubgraphView(const Graph &originalGraph, const std::
 std::set<node> InducedSubgraphView::boundary() {
     std::set<node> result;
     for (node u : nodeSubset) {
-        originalGraph.forNeighborsOf(u, [&](node v) {
+        originalGraph.get().forNeighborsOf(u, [&](node v) {
             if (!hasNode(v))
                 result.insert(v);
         });
@@ -52,6 +52,10 @@ edgeweight InducedSubgraphView ::weightedDegreeIn(node u, bool countSelfLoopsTwi
     return computeWeightedDegree(u, true, countSelfLoopsTwice);
 }
 
+index InducedSubgraphView::upperNodeIdBound() const noexcept {
+    return originalGraph.get().upperNodeIdBound();
+}
+
 bool InducedSubgraphView::isIsolated(node v) const {
     assert(hasNode(v));
     return degree(v) == 0 && (!directed || degreeIn(v) == 0);
@@ -62,25 +66,25 @@ bool InducedSubgraphView::hasNode(node v) const noexcept {
 }
 
 bool InducedSubgraphView::hasEdge(node u, node v) const noexcept {
-    return hasNode(u) && hasNode(v) && originalGraph.hasEdge(v, v);
+    return hasNode(u) && hasNode(v) && originalGraph.get().hasEdge(u, v);
 }
 
 edgeweight InducedSubgraphView::weight(node u, node v) const {
     if (!hasEdge(u, v))
         return 0;
-    return originalGraph.weight(u, v);
+    return originalGraph.get().weight(u, v);
 }
 
 void InducedSubgraphView::addNodes(const std::set<node> &subset) {
     for (node v : subset) {
-        if (hasNode(v) || !originalGraph.hasNode(v))
+        if (hasNode(v) || !originalGraph.get().hasNode(v))
             continue;
 
         nodeSubset.insert(v);
         n += 1;
 
         count degree = 0;
-        originalGraph.forNeighborsOf(v, [&](node u, edgeweight ew) {
+        originalGraph.get().forNeighborsOf(v, [&](node u, edgeweight ew) {
             if (!hasNode(u))
                 return;
             if (u == v)
@@ -94,7 +98,7 @@ void InducedSubgraphView::addNodes(const std::set<node> &subset) {
 
         if (isDirected()) {
             count inDegree = 0;
-            originalGraph.forInNeighborsOf(v, [&](node u, edgeweight ew) {
+            originalGraph.get().forInNeighborsOf(v, [&](node u, edgeweight ew) {
                 if (!hasNode(u) || u == v)
                     return;
                 ++inducedDegree[u];
@@ -116,7 +120,7 @@ void InducedSubgraphView::removeNodes(const std::set<node> &subset) {
         if (isDirected())
             m -= inducedInDegree[v];
 
-        originalGraph.forNeighborsOf(v, [&](node u, edgeweight ew) {
+        originalGraph.get().forNeighborsOf(v, [&](node u, edgeweight ew) {
             if (!hasNode(u))
                 return;
             if (u == v)
@@ -125,7 +129,7 @@ void InducedSubgraphView::removeNodes(const std::set<node> &subset) {
         });
 
         if (isDirected()) {
-            originalGraph.forInNeighborsOf(v, [&](node u, edgeweight ew) {
+            originalGraph.get().forInNeighborsOf(v, [&](node u, edgeweight ew) {
                 if (!hasNode(u) || u == v)
                     return;
                 --inducedDegree[u];
@@ -153,10 +157,10 @@ std::vector<node> InducedSubgraphView::getNeighborsVector(node u, bool inEdges) 
 
     if (inEdges) {
         result.reserve(degreeIn(u));
-        originalGraph.forInNeighborsOf(u, cb);
+        originalGraph.get().forInNeighborsOf(u, cb);
     } else {
         result.reserve(degree(u));
-        originalGraph.forNeighborsOf(u, cb);
+        originalGraph.get().forNeighborsOf(u, cb);
     }
 
     return result;
@@ -177,11 +181,11 @@ InducedSubgraphView::getNeighborsWithWeightsVector(node u, bool inEdges) const {
     if (inEdges) {
         nodeVec.reserve(degreeIn(u));
         weightVec.reserve(degreeIn(u));
-        originalGraph.forInNeighborsOf(u, cb);
+        originalGraph.get().forInNeighborsOf(u, cb);
     } else {
         nodeVec.reserve(degree(u));
         weightVec.reserve(degree(u));
-        originalGraph.forNeighborsOf(u, cb);
+        originalGraph.get().forNeighborsOf(u, cb);
     }
 
     return {nodeVec, weightVec};
@@ -197,7 +201,7 @@ void InducedSubgraphView::forEdgesVirtualImpl(
 void InducedSubgraphView::forEdgesOfVirtualImpl(
     node u, bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
-    originalGraph.forEdgesOf(u, [&](node u, node v, edgeweight w, edgeid x) {
+    originalGraph.get().forEdgesOf(u, [&](node u, node v, edgeweight w, edgeid x) {
         if (hasEdge(u, v))
             handle(u, v, w, x);
     });
@@ -206,7 +210,7 @@ void InducedSubgraphView::forEdgesOfVirtualImpl(
 void InducedSubgraphView::forInEdgesVirtualImpl(
     node u, bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
-    originalGraph.forInEdgesOf(u, [&](node u, node v, edgeweight w, edgeid x) {
+    originalGraph.get().forInEdgesOf(u, [&](node u, node v, edgeweight w, edgeid x) {
         if (hasEdge(u, v))
             handle(u, v, w, x);
     });
@@ -215,7 +219,7 @@ void InducedSubgraphView::forInEdgesVirtualImpl(
 double InducedSubgraphView::parallelSumForEdgesVirtualImpl(
     bool directed, bool weighted, bool hasEdgeIds,
     std::function<double(node, node, edgeweight, edgeid)> handle) const {
-    return originalGraph.parallelSumForEdges([&](node u, node v, edgeweight w, edgeid x) {
+    return originalGraph.get().parallelSumForEdges([&](node u, node v, edgeweight w, edgeid x) {
         return hasEdge(u, v) ? handle(u, v, w, x) : 0;
     });
 }
@@ -264,9 +268,9 @@ edgeweight InducedSubgraphView::computeWeightedDegree(node u, bool inDegree,
                 sum += (countSelfLoopsTwice && u == v) ? 2. * w : w;
         };
         if (inDegree) {
-            originalGraph.forInNeighborsOf(u, sumWeights);
+            originalGraph.get().forInNeighborsOf(u, sumWeights);
         } else {
-            originalGraph.forNeighborsOf(u, sumWeights);
+            originalGraph.get().forNeighborsOf(u, sumWeights);
         }
         return sum;
     }
@@ -276,9 +280,9 @@ edgeweight InducedSubgraphView::computeWeightedDegree(node u, bool inDegree,
 
     if (countSelfLoopsTwice && numberOfSelfLoops()) {
         if (inDegree) {
-            originalGraph.forInNeighborsOf(u, countSelfLoops);
+            originalGraph.get().forInNeighborsOf(u, countSelfLoops);
         } else {
-            originalGraph.forNeighborsOf(u, countSelfLoops);
+            originalGraph.get().forNeighborsOf(u, countSelfLoops);
         }
     }
 
