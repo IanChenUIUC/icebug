@@ -572,6 +572,154 @@ TEST_P(InducedSubgraphViewGTest, testNodeIterator) {
     }
 }
 
+TEST_P(InducedSubgraphViewGTest, testEdgeIterator) {
+    auto testForward = [&](const InducedSubgraphView &G) {
+        auto preIter = G.edgeRange().begin();
+        auto postIter = G.edgeRange().begin();
+
+        G.forEdges([&](node, node) {
+            ASSERT_EQ(preIter, postIter);
+            const auto edge = *preIter;
+            ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
+            ++preIter;
+            postIter++;
+        });
+
+        ASSERT_EQ(preIter, G.edgeRange().end());
+        ASSERT_EQ(postIter, G.edgeRange().end());
+
+        count edges = 0;
+        for (const auto edge : InducedSubgraphView::EdgeRange(G)) {
+            ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
+            ++edges;
+        }
+        ASSERT_EQ(edges, G.numberOfEdges());
+    };
+
+    auto testForwardWeighted = [&](const InducedSubgraphView &G) {
+        auto preIter = G.edgeWeightRange().begin();
+        auto postIter = preIter;
+
+        G.forEdges([&](node, node) {
+            ASSERT_EQ(preIter, postIter);
+            const auto edge = *preIter;
+            ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
+            ASSERT_DOUBLE_EQ(G.weight(edge.u, edge.v), edge.weight);
+            ++preIter;
+            postIter++;
+        });
+
+        ASSERT_EQ(preIter, G.edgeWeightRange().end());
+        ASSERT_EQ(postIter, G.edgeWeightRange().end());
+
+        count edges = 0;
+        for (const auto edge : InducedSubgraphView::EdgeWeightRange(G)) {
+            ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
+            ASSERT_DOUBLE_EQ(G.weight(edge.u, edge.v), edge.weight);
+            ++edges;
+        }
+        ASSERT_EQ(edges, G.numberOfEdges());
+    };
+
+    auto testBackward = [&](const InducedSubgraphView &G) {
+        auto preIter = G.edgeRange().begin();
+        auto postIter = preIter;
+        G.forEdges([&](node, node) {
+            ++preIter;
+            postIter++;
+        });
+
+        ASSERT_EQ(preIter, G.edgeRange().end());
+        ASSERT_EQ(postIter, G.edgeRange().end());
+
+        G.forEdges([&](node, node) {
+            --preIter;
+            postIter--;
+            ASSERT_EQ(preIter, postIter);
+            const auto edge = *preIter;
+            ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
+        });
+
+        ASSERT_EQ(preIter, G.edgeRange().begin());
+        ASSERT_EQ(postIter, G.edgeRange().begin());
+    };
+
+    auto testBackwardWeighted = [&](const InducedSubgraphView &G) {
+        auto preIter = G.edgeWeightRange().begin();
+        auto postIter = preIter;
+        G.forEdges([&](node, node) {
+            ++preIter;
+            postIter++;
+        });
+
+        G.forEdges([&](node, node) {
+            --preIter;
+            postIter--;
+            ASSERT_EQ(preIter, postIter);
+            const auto edge = *preIter;
+            ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
+            ASSERT_DOUBLE_EQ(G.weight(edge.u, edge.v), edge.weight);
+        });
+    };
+
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        testForward(G);
+        testBackward(G);
+        testForwardWeighted(G);
+        testBackwardWeighted(G);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testNeighborsIterators) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            auto range = G.neighborRange(u);
+            auto iter = range.begin();
+            G.forNeighborsOf(u, [&](node v) {
+                ASSERT_TRUE(*iter == v);
+                ++iter;
+            });
+            ASSERT_TRUE(iter == range.end());
+
+            if (G.isWeighted()) {
+                auto range = G.weightNeighborRange(u);
+                auto iterW = range.begin();
+                G.forNeighborsOf(u, [&](node v, edgeweight w) {
+                    ASSERT_TRUE((*iterW).first == v);
+                    ASSERT_TRUE((*iterW).second == w);
+                    ++iterW;
+                });
+                ASSERT_TRUE(iterW == range.end());
+            }
+
+            if (G.isDirected()) {
+                auto range = G.inNeighborRange(u);
+                auto inIter = range.begin();
+                G.forInNeighborsOf(u, [&](node v) {
+                    ASSERT_TRUE(*inIter == v);
+                    ++inIter;
+                });
+                ASSERT_TRUE(inIter == range.end());
+
+                if (G.isWeighted()) {
+                    auto range = G.weightInNeighborRange(u);
+                    auto iterWin = range.begin();
+                    G.forInNeighborsOf(u, [&](node v, edgeweight w) {
+                        ASSERT_TRUE((*iterWin).first == v);
+                        ASSERT_TRUE((*iterWin).second == w);
+                        ++iterWin;
+                    });
+                    ASSERT_TRUE(iterWin == range.end());
+                }
+            }
+        }
+    }
+}
+
 /** NODE ITERATORS **/
 
 TEST_P(InducedSubgraphViewGTest, testForNodes) {
@@ -671,6 +819,235 @@ TEST_P(InducedSubgraphViewGTest, testParallelSumForNodes) {
         for (node v : variant.nodes)
             expected += 2 * v + 0.5;
         ASSERT_DOUBLE_EQ(expected, sum);
+    }
+}
+
+/** EDGE ITERATORS **/
+
+TEST_P(InducedSubgraphViewGTest, testForEdges) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        auto norm = [&](node u, node v) {
+            return Gv.isDirected() ? std::make_pair(u, v)
+                                   : std::make_pair(std::min(u, v), std::max(u, v));
+        };
+
+        std::multiset<std::pair<node, node>> seen, ref;
+        Gv.forEdges([&](node u, node v) {
+            ASSERT_TRUE(Gv.hasEdge(u, v));
+            seen.insert(norm(u, v));
+        });
+        expected.forEdges([&](node u, node v) { ref.insert(norm(u, v)); });
+        EXPECT_EQ(ref, seen);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForWeightedEdges) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        auto norm = [&](node u, node v) {
+            return Gv.isDirected() ? std::make_pair(u, v)
+                                   : std::make_pair(std::min(u, v), std::max(u, v));
+        };
+
+        std::multiset<std::pair<node, node>> seen, ref;
+        edgeweight viewSum = 0, refSum = 0;
+        Gv.forEdges([&](node u, node v, edgeweight ew) {
+            ASSERT_TRUE(Gv.hasEdge(u, v));
+            ASSERT_EQ(Gv.weight(u, v), ew);
+            seen.insert(norm(u, v));
+            viewSum += ew;
+        });
+        expected.forEdges([&](node u, node v, edgeweight ew) {
+            ref.insert(norm(u, v));
+            refSum += ew;
+        });
+        EXPECT_EQ(ref, seen);
+        EXPECT_DOUBLE_EQ(refSum, viewSum);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testParallelForWeightedEdges) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+
+        double weightSum = 0.0;
+        Gv.parallelForEdges([&](node, node, edgeweight ew) {
+#pragma omp atomic
+            weightSum += ew;
+        });
+        EXPECT_DOUBLE_EQ(expected.totalEdgeWeight(), weightSum);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testParallelForEdges) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+
+        count edges = 0;
+        Gv.parallelForEdges([&](node, node) {
+#pragma omp atomic
+            ++edges;
+        });
+        EXPECT_EQ(expected.numberOfEdges(), edges);
+    }
+}
+
+/** NEIGHBORHOOD ITERATORS **/
+
+TEST_P(InducedSubgraphViewGTest, testForNeighborsOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<node> seen, ref;
+            Gv.forNeighborsOf(u, [&](node v) { seen.insert(v); });
+            expected.forNeighborsOf(u, [&](node v) { ref.insert(v); });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForWeightedNeighborsOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<std::pair<node, edgeweight>> seen, ref;
+            Gv.forNeighborsOf(u, [&](node v, edgeweight w) { seen.insert({v, w}); });
+            expected.forNeighborsOf(u, [&](node v, edgeweight w) { ref.insert({v, w}); });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForEdgesOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<node> seen, ref;
+            Gv.forEdgesOf(u, [&](node v, node w) {
+                EXPECT_EQ(u, v);
+                seen.insert(w);
+            });
+            expected.forEdgesOf(u, [&](node v, node w) {
+                EXPECT_EQ(u, v);
+                ref.insert(w);
+            });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForWeightedEdgesOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<std::pair<node, edgeweight>> seen, ref;
+            Gv.forEdgesOf(u, [&](node v, node w, edgeweight ew) {
+                EXPECT_EQ(u, v);
+                seen.insert({w, ew});
+            });
+            expected.forEdgesOf(u, [&](node v, node w, edgeweight ew) {
+                EXPECT_EQ(u, v);
+                ref.insert({w, ew});
+            });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testParallelSumForWeightedEdges) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+
+        double sum = Gv.parallelSumForEdges([](node, node, edgeweight ew) { return 1.5 * ew; });
+        EXPECT_DOUBLE_EQ(1.5 * expected.totalEdgeWeight(), sum);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForInNeighborsOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<node> seen, ref;
+            Gv.forInNeighborsOf(u, [&](node v) { seen.insert(v); });
+            expected.forInNeighborsOf(u, [&](node v) { ref.insert(v); });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForWeightedInNeighborsOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<std::pair<node, edgeweight>> seen, ref;
+            Gv.forInNeighborsOf(u, [&](node v, edgeweight w) { seen.insert({v, w}); });
+            expected.forInNeighborsOf(u, [&](node v, edgeweight w) { ref.insert({v, w}); });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForInEdgesOf) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<node> seen, ref;
+            Gv.forInEdgesOf(u, [&](node x, node v) {
+                EXPECT_EQ(u, x);
+                seen.insert(v);
+            });
+            expected.forInEdgesOf(u, [&](node x, node v) {
+                EXPECT_EQ(u, x);
+                ref.insert(v);
+            });
+            EXPECT_EQ(ref, seen);
+        }
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testForWeightedInEdgesOf) {
+    this->Ghouse.addEdge(3, 3, 2.5);
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u : variant.nodes) {
+            std::multiset<std::pair<node, edgeweight>> seen, ref;
+            Gv.forInEdgesOf(u, [&](node x, node v, edgeweight ew) {
+                EXPECT_EQ(u, x);
+                seen.insert({v, ew});
+            });
+            expected.forInEdgesOf(u, [&](node x, node v, edgeweight ew) {
+                EXPECT_EQ(u, x);
+                ref.insert({v, ew});
+            });
+            EXPECT_EQ(ref, seen);
+        }
     }
 }
 /*

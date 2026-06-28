@@ -1198,7 +1198,7 @@ public:
      * @return Iterator range over the neighbors of @a u.
      */
     NeighborRange<false> neighborRange(node u) const {
-        assert(exists[u]);
+        assert(hasNode(u));
         return NeighborRange<false>(*this, u);
     }
 
@@ -1212,7 +1212,7 @@ public:
      */
     NeighborWeightRange<false> weightNeighborRange(node u) const {
         assert(isWeighted());
-        assert(exists[u]);
+        assert(hasNode(u));
         return NeighborWeightRange<false>(*this, u);
     }
 
@@ -1224,7 +1224,7 @@ public:
      */
     NeighborRange<true> inNeighborRange(node u) const {
         assert(isDirected());
-        assert(exists[u]);
+        assert(hasNode(u));
         return NeighborRange<true>(*this, u);
     }
 
@@ -1238,7 +1238,7 @@ public:
      */
     NeighborWeightRange<true> weightInNeighborRange(node u) const {
         assert(isDirected() && isWeighted());
-        assert(exists[u]);
+        assert(hasNode(u));
         return NeighborWeightRange<true>(*this, u);
     }
 
