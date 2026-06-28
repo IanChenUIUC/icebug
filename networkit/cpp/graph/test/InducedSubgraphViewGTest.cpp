@@ -6,8 +6,10 @@
  */
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <tuple>
+#include <unordered_set>
 
 #include "networkit/auxiliary/Random.hpp"
 #include <gtest/gtest.h>
@@ -378,6 +380,297 @@ TEST_P(InducedSubgraphViewGTest, testWeightedDegree3) {
                 EXPECT_DOUBLE_EQ(expected.weightedDegreeIn(u, true), G.weightedDegreeIn(u, true));
             }
         }
+    }
+}
+
+/** EDGE MODIFIERS **/
+
+TEST_P(InducedSubgraphViewGTest, testHasEdge) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u = 0; u < Ghouse.upperNodeIdBound(); ++u)
+            for (node v = 0; v < Ghouse.upperNodeIdBound(); ++v)
+                EXPECT_EQ(expected.hasEdge(u, v), Gv.hasEdge(u, v));
+    }
+}
+
+/** GLOBAL PROPERTIES **/
+
+TEST_P(InducedSubgraphViewGTest, testSelfLoopCountSimple) {
+    this->Ghouse.addEdge(0, 0);
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        EXPECT_EQ(expected.numberOfSelfLoops(), Gv.numberOfSelfLoops());
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testIsWeighted) {
+    InducedSubgraphView G(Ghouse, allNodes(Ghouse));
+    ASSERT_EQ(isWeighted(), G.isWeighted());
+}
+
+TEST_P(InducedSubgraphViewGTest, testIsDirected) {
+    InducedSubgraphView G(Ghouse, allNodes(Ghouse));
+    ASSERT_EQ(isDirected(), G.isDirected());
+}
+
+TEST_P(InducedSubgraphViewGTest, testIsEmpty) {
+    GraphW H = createGraphW(2);
+    InducedSubgraphView G1(H, std::set<node>{});
+    InducedSubgraphView G2(H, someNodes(H, 2));
+
+    ASSERT_TRUE(G1.isEmpty());
+    ASSERT_FALSE(G2.isEmpty());
+
+    G1.addNode(0);
+    G2.removeNodes({0});
+    ASSERT_FALSE(G1.isEmpty());
+    ASSERT_FALSE(G2.isEmpty());
+
+    G1.removeNodes({0});
+    G2.removeNodes({1});
+    ASSERT_TRUE(G1.isEmpty());
+    ASSERT_TRUE(G2.isEmpty());
+}
+
+TEST_P(InducedSubgraphViewGTest, testNumberOfNodes) {
+    GraphW H = createGraphW(2);
+    InducedSubgraphView G1(H, std::set<node>{});
+    ASSERT_EQ(0u, G1.numberOfNodes());
+    G1.addNode(0);
+    ASSERT_EQ(1u, G1.numberOfNodes());
+    G1.addNode(1);
+    ASSERT_EQ(2u, G1.numberOfNodes());
+    G1.removeNodes({0});
+    ASSERT_EQ(1u, G1.numberOfNodes());
+    G1.removeNodes({1});
+    ASSERT_EQ(0u, G1.numberOfNodes());
+}
+
+TEST_P(InducedSubgraphViewGTest, testNumberOfEdges) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        EXPECT_EQ(expected.numberOfEdges(), Gv.numberOfEdges());
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testNumberOfSelfLoops) {
+    this->Ghouse.addEdge(0, 0);
+    this->Ghouse.addEdge(1, 1);
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        EXPECT_EQ(expected.numberOfSelfLoops(), Gv.numberOfSelfLoops());
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testUpperNodeIdBound) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        EXPECT_EQ(Ghouse.upperNodeIdBound(), Gv.upperNodeIdBound());
+    }
+}
+
+/** EDGE ATTRIBUTES **/
+
+TEST_P(InducedSubgraphViewGTest, testWeight) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        for (node u = 0; u < Ghouse.upperNodeIdBound(); ++u)
+            for (node v = 0; v < Ghouse.upperNodeIdBound(); ++v)
+                EXPECT_EQ(expected.weight(u, v), Gv.weight(u, v));
+    }
+}
+
+/** SUMS **/
+
+TEST_P(InducedSubgraphViewGTest, testTotalEdgeWeight) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+        EXPECT_DOUBLE_EQ(expected.totalEdgeWeight(), Gv.totalEdgeWeight());
+    }
+}
+
+/** Collections **/
+
+TEST_P(InducedSubgraphViewGTest, testNodeIterator) {
+    Aux::Random::setSeed(42, false);
+
+    auto testForward = [](const InducedSubgraphView &G) {
+        auto preIter = G.nodeRange().begin();
+        auto postIter = G.nodeRange().begin();
+
+        G.forNodes([&](const node u) {
+            ASSERT_EQ(*preIter, u);
+            ASSERT_EQ(*postIter, u);
+            ++preIter;
+            postIter++;
+        });
+
+        ASSERT_EQ(preIter, G.nodeRange().end());
+        ASSERT_EQ(postIter, G.nodeRange().end());
+
+        InducedSubgraphView G1(G);
+        for (const auto u : InducedSubgraphView::NodeRange(G)) {
+            ASSERT_TRUE(G1.hasNode(u));
+            G1.removeNodes({u});
+        }
+        ASSERT_EQ(G1.numberOfNodes(), 0u);
+    };
+
+    auto testBackward = [](const InducedSubgraphView &G) {
+        const std::vector<node> nodes(InducedSubgraphView::NodeRange(G).begin(),
+                                      InducedSubgraphView::NodeRange(G).end());
+        std::vector<node> v;
+        G.forNodes([&](node u) { v.push_back(u); });
+
+        ASSERT_EQ(std::unordered_set<node>(nodes.begin(), nodes.end()).size(), nodes.size());
+        ASSERT_EQ(nodes.size(), G.numberOfNodes());
+
+        auto preIter = G.nodeRange().begin();
+        auto postIter = G.nodeRange().begin();
+        for (count i = 0; i < G.numberOfNodes(); ++i) {
+            ++preIter;
+            postIter++;
+        }
+
+        ASSERT_EQ(preIter, G.nodeRange().end());
+        ASSERT_EQ(postIter, G.nodeRange().end());
+        auto vecIter = nodes.rbegin();
+        while (vecIter != nodes.rend()) {
+            ASSERT_EQ(*vecIter, *(--preIter));
+            if (postIter != G.nodeRange().end()) {
+                ASSERT_NE(*vecIter, *(postIter--));
+            } else {
+                postIter--;
+            }
+            ASSERT_EQ(*vecIter, *postIter);
+            ++vecIter;
+        }
+
+        ASSERT_EQ(preIter, G.nodeRange().begin());
+        ASSERT_EQ(postIter, G.nodeRange().begin());
+    };
+
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        testForward(G);
+        testBackward(G);
+    }
+}
+
+/** NODE ITERATORS **/
+
+TEST_P(InducedSubgraphViewGTest, testForNodes) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        std::set<node> visited;
+        G.forNodes([&](node v) { ASSERT_TRUE(visited.insert(v).second); });
+        ASSERT_EQ(variant.nodes, visited);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testParallelForNodes) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        std::vector<node> visited(G.upperNodeIdBound(), none);
+        G.parallelForNodes([&](node u) { visited[u] = u; });
+
+        std::set<node> seen;
+        for (node u = 0; u < G.upperNodeIdBound(); ++u)
+            if (visited[u] != none)
+                seen.insert(visited[u]);
+        ASSERT_EQ(variant.nodes, seen);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, forNodesWhile) {
+    GraphW H = createGraphW(100);
+    InducedSubgraphView G(H, allNodes(H));
+    count stopAfter = 10;
+    count nodesSeen = 0;
+
+    G.forNodesWhile([&]() { return nodesSeen < stopAfter; }, [&](node) { nodesSeen++; });
+
+    ASSERT_EQ(stopAfter, nodesSeen);
+}
+
+TEST_P(InducedSubgraphViewGTest, testForNodesInRandomOrder) {
+    count n = 1000;
+    count samples = 100;
+    double maxAbsoluteError = 0.005;
+    GraphW H = createGraphW(n);
+    InducedSubgraphView G(H, allNodes(H));
+
+    node lastNode = n / 2;
+    count greaterLastNode = 0;
+    count smallerLastNode = 0;
+    std::vector<count> visitCount(n, 0);
+
+    for (count i = 0; i < samples; i++) {
+        G.forNodesInRandomOrder([&](node v) {
+            if (v > lastNode) {
+                greaterLastNode++;
+            } else {
+                smallerLastNode++;
+            }
+            visitCount[v]++;
+            lastNode = v;
+        });
+    }
+
+    for (node v = 0; v < n; v++) {
+        ASSERT_EQ(samples, visitCount[v]);
+    }
+
+    ASSERT_NEAR(0.5, (double)greaterLastNode / n / samples, maxAbsoluteError);
+    ASSERT_NEAR(0.5, (double)smallerLastNode / n / samples, maxAbsoluteError);
+}
+
+TEST_P(InducedSubgraphViewGTest, testForNodePairs) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        const count k = variant.nodes.size();
+
+        count pairs = 0;
+        std::set<std::pair<node, node>> seen;
+        G.forNodePairs([&](node u, node v) {
+            ++pairs;
+            ASSERT_NE(u, v);
+            ASSERT_TRUE(variant.nodes.count(u) && variant.nodes.count(v));
+            node a = std::min(u, v), b = std::max(u, v);
+            ASSERT_TRUE(seen.insert({a, b}).second);
+        });
+        EXPECT_EQ(k * (k - 1) / 2, pairs);
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testParallelSumForNodes) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView G(Ghouse, variant.nodes);
+        double sum = G.parallelSumForNodes([](node v) { return 2 * v + 0.5; });
+
+        double expected = 0;
+        for (node v : variant.nodes)
+            expected += 2 * v + 0.5;
+        ASSERT_DOUBLE_EQ(expected, sum);
     }
 }
 /*

@@ -72,7 +72,7 @@ public:
         return tmp;
     }
 
-    NodeIteratorBase operator--() {
+    NodeIteratorBase &operator--() {
         assert(u);
         do {
             --u;
@@ -107,7 +107,7 @@ class NodeRangeBase {
 public:
     NodeRangeBase(const GraphType &G) : G(&G) {}
 
-    NodeRangeBase() : G(nullptr){};
+    NodeRangeBase() : G(nullptr) {};
 
     ~NodeRangeBase() = default;
 
