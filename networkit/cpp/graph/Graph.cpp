@@ -416,7 +416,7 @@ void Graph::forEdgesOfVirtualImpl(
     }
 }
 
-void Graph::forInEdgesVirtualImpl(
+void Graph::forInEdgesOfVirtualImpl(
     node u, [[maybe_unused]] bool directed, [[maybe_unused]] bool weighted,
     [[maybe_unused]] bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {

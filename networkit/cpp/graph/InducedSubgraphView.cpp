@@ -195,24 +195,24 @@ void InducedSubgraphView::forEdgesVirtualImpl(
     bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
     for (node u : nodeSubset)
-        forEdgesOf(u, handle);
+        forEdgesOfVirtualImpl(u, directed, weighted, hasEdgeIds, handle);
 }
 
 void InducedSubgraphView::forEdgesOfVirtualImpl(
     node u, bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
     originalGraph.get().forEdgesOf(u, [&](node u, node v, edgeweight w, edgeid x) {
-        if (hasEdge(u, v))
+        if (hasNode(v))
             handle(u, v, w, x);
     });
 }
 
-void InducedSubgraphView::forInEdgesVirtualImpl(
+void InducedSubgraphView::forInEdgesOfVirtualImpl(
     node u, bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
     originalGraph.get().forInEdgesOf(u, [&](node u, node v, edgeweight w, edgeid x) {
-        if (hasEdge(u, v))
-            handle(u, v, w, x);
+        if (hasNode(v))
+            handle(v, u, w, x);
     });
 }
 
@@ -260,17 +260,15 @@ index InducedSubgraphView::indexInOutEdgeArray(node u, node v) const {
 
 edgeweight InducedSubgraphView::computeWeightedDegree(node u, bool inDegree,
                                                       bool countSelfLoopsTwice) const {
-    // TODO: clean this up using forNeighbors in the subgraph, when that works
     if (weighted) {
         edgeweight sum = 0.0;
         auto sumWeights = [&](node v, edgeweight w) {
-            if (hasNode(v))
-                sum += (countSelfLoopsTwice && u == v) ? 2. * w : w;
+            sum += (countSelfLoopsTwice && u == v) ? 2. * w : w;
         };
         if (inDegree) {
-            originalGraph.get().forInNeighborsOf(u, sumWeights);
+            forInNeighborsOf(u, sumWeights);
         } else {
-            originalGraph.get().forNeighborsOf(u, sumWeights);
+            forNeighborsOf(u, sumWeights);
         }
         return sum;
     }
@@ -280,9 +278,9 @@ edgeweight InducedSubgraphView::computeWeightedDegree(node u, bool inDegree,
 
     if (countSelfLoopsTwice && numberOfSelfLoops()) {
         if (inDegree) {
-            originalGraph.get().forInNeighborsOf(u, countSelfLoops);
+            forInNeighborsOf(u, countSelfLoops);
         } else {
-            originalGraph.get().forNeighborsOf(u, countSelfLoops);
+            forNeighborsOf(u, countSelfLoops);
         }
     }
 

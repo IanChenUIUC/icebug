@@ -470,8 +470,8 @@ private:
      * @brief Virtual method for forInEdgesOf - overridden by GraphW for vector-based iteration
      */
     virtual void
-    forInEdgesVirtualImpl(node u, bool directed, bool weighted, bool hasEdgeIds,
-                          std::function<void(node, node, edgeweight, edgeid)> handle) const;
+    forInEdgesOfVirtualImpl(node u, bool directed, bool weighted, bool hasEdgeIds,
+                            std::function<void(node, node, edgeweight, edgeid)> handle) const;
 
     /**
      * @brief Virtual method for parallelSumForEdges - overridden by GraphW for vector-based
@@ -933,7 +933,7 @@ public:
      * @return @c true if @a v exists, @c false otherwise.
      */
 
-    bool hasNode(node v) const noexcept { return (v < z) && this->exists[v]; }
+    virtual bool hasNode(node v) const noexcept { return (v < z) && this->exists[v]; }
 
     /**
      * Check if edge (u, v) exists in the graph.
@@ -942,7 +942,7 @@ public:
      * @param v Second endpoint of edge.
      * @return @c true if edge exists, @c false otherwise.
      */
-    bool hasEdge(node u, node v) const;
+    virtual bool hasEdge(node u, node v) const;
 
     /**
      * @brief Virtual method for hasEdge - overridden by GraphW for vector-based graphs
@@ -1007,7 +1007,7 @@ public:
      *
      * @return Weighted degree of @a u.
      */
-    edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
+    virtual edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
 
     /**
      * Returns the weighted in-degree of @a u.
@@ -1017,7 +1017,7 @@ public:
      *
      * @return Weighted in-degree of @a v.
      */
-    edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
+    virtual edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
 
     /**
      * Returns <code>true</code> if this graph supports edge weights other
@@ -1732,12 +1732,12 @@ inline void Graph::forInEdgesOfImpl(node u, L handle) const {
     } else {
         // For vector-based graphs (GraphW), use the virtual dispatch
         // Check exists for mutable graphs
-        if (!exists[u])
+        if (!hasNode(u))
             return;
         // GraphW's forInEdgesVirtualImpl calls handle(v, u, ...) where v is neighbor and u is
         // current node We need to swap so that edgeLambda receives (current, neighbor, ...) and
         // passes neighbor to f
-        forInEdgesVirtualImpl(
+        forInEdgesOfVirtualImpl(
             u, graphIsDirected, hasWeights, graphHasEdgeIds,
             [&](node v, node u, edgeweight w, edgeid e) { edgeLambda(handle, u, v, w, e); });
     }
@@ -1936,6 +1936,10 @@ void Graph::forEdgesOf(node u, L handle) const {
             }
         }
     } else {
+        // For vector-based graphs (GraphW), use the virtual dispatch
+        // Check exists for mutable graphs
+        if (!hasNode(u))
+            return;
         // For vector-based graphs, use virtual dispatch
         forEdgesOfVirtualImpl(u, directed, weighted, edgesIndexed,
                               [&](node uu, node vv, edgeweight ww, edgeid ee) {

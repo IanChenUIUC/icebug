@@ -195,17 +195,24 @@ public:
     template <typename L>
     void parallelForNodePairs(L handle) const;
 
+    /**
+     * Iterate in parallel over all nodes and sum (reduce +) the values
+     * returned by the handler
+     */
+    template <typename L>
+    double parallelSumForNodes(L handle) const;
+
     // Override from Graph base
     count degree(node v) const override;
     count degreeIn(node v) const override;
     bool isIsolated(node v) const override;
-    edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
-    edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
+    edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const override;
+    edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const override;
 
     index upperNodeIdBound() const noexcept;
 
-    bool hasNode(node v) const noexcept;
-    bool hasEdge(node u, node v) const noexcept;
+    bool hasNode(node v) const noexcept override;
+    bool hasEdge(node u, node v) const noexcept override;
     edgeweight weight(node u, node v) const override;
 
     // FIXME: NOT PLANNED TO IMPLEMENT
@@ -244,7 +251,7 @@ private:
     /**
      * @brief Virtual method for forInEdgesOf
      */
-    void forInEdgesVirtualImpl(
+    void forInEdgesOfVirtualImpl(
         node u, bool directed, bool weighted, bool hasEdgeIds,
         std::function<void(node, node, edgeweight, edgeid)> handle) const override;
 
@@ -351,7 +358,7 @@ void InducedSubgraphView::forNodes(L handle) const {
 
 template <typename C, typename L>
 void InducedSubgraphView::forNodesWhile(C condition, L handle) const {
-    for (auto it = nodeSubset.begin(); it != nodeSubset.end() && !condition(); ++it)
+    for (auto it = nodeSubset.begin(); it != nodeSubset.end() && condition(); ++it)
         handle(*it);
 }
 
@@ -372,17 +379,31 @@ void InducedSubgraphView::forNodePairs(L handle) const {
 
 template <typename L>
 void InducedSubgraphView::parallelForNodes(L handle) const {
-    throw std::runtime_error("parallelForNodes not implemented for InducedSubgraphView");
+    WARN("parallelForNodes not implemented for InducedSubgraphView... fallback to sequential");
+    return forNodes(handle);
 }
 
 template <typename L>
 void InducedSubgraphView::balancedParallelForNodes(L handle) const {
-    throw std::runtime_error("balancedParallelForNodes not implemented for InducedSubgraphView");
+    WARN("balancedParallelForNodes not implemented for InducedSubgraphView... fallback to "
+         "sequential");
+    return forNodes(handle);
 }
 
 template <typename L>
 void InducedSubgraphView::parallelForNodePairs(L handle) const {
-    throw std::runtime_error("parallelForNodePairs not implemented for InducedSubgraphView");
+    WARN("parallelForNodePairs not implemented for InducedSubgraphView... fallback to "
+         "sequential");
+    return forNodePairs(handle);
+}
+
+template <typename L>
+double InducedSubgraphView::parallelSumForNodes(L handle) const {
+    WARN("parallelSumForNodes not implemented for InducedSubgraphView... fallback to "
+         "sequential");
+    double sum = 0.0;
+    forNodes([&](node u) { sum += handle(u); });
+    return sum;
 }
 
 } // namespace NetworKit

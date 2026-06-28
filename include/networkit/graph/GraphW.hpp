@@ -958,7 +958,7 @@ private:
     /**
      * @brief Override for vector-based forInEdgesOf
      */
-    void forInEdgesVirtualImpl(
+    void forInEdgesOfVirtualImpl(
         node u, bool directed, bool weighted, bool hasEdgeIds,
         std::function<void(node, node, edgeweight, edgeid)> handle) const override;
 
