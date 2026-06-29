@@ -577,18 +577,20 @@ TEST_P(InducedSubgraphViewGTest, testEdgeIterator) {
         auto preIter = G.edgeRange().begin();
         auto postIter = G.edgeRange().begin();
 
+        count edges = 0;
         G.forEdges([&](node, node) {
             ASSERT_EQ(preIter, postIter);
             const auto edge = *preIter;
             ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
             ++preIter;
             postIter++;
+            ++edges;
         });
 
         ASSERT_EQ(preIter, G.edgeRange().end());
         ASSERT_EQ(postIter, G.edgeRange().end());
 
-        count edges = 0;
+        edges = 0;
         for (const auto edge : InducedSubgraphView::EdgeRange(G)) {
             ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
             ++edges;
