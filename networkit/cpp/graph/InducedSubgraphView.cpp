@@ -10,8 +10,6 @@
 #include <networkit/graph/InducedSubgraphView.hpp>
 
 // TODO: check if attributes work transparently, or if special handling needs to be done
-// TODO: document that EdgeIterators probably won't work (getIthNeighbor not impl-ed)
-//   but because we only need ++ and --, we can probably still implement this.
 
 namespace NetworKit {
 
@@ -21,7 +19,7 @@ InducedSubgraphView::InducedSubgraphView(const Graph &originalGraph, const std::
     addNodes(subset);
 }
 
-std::set<node> InducedSubgraphView::boundary() {
+std::set<node> InducedSubgraphView::frontier() {
     std::set<node> result;
     for (node u : nodeSubset) {
         originalGraph.get().forNeighborsOf(u, [&](node v) {

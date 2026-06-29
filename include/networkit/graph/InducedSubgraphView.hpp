@@ -72,9 +72,9 @@ public:
     void removeNodes(const std::set<node> &subset);
 
     /**
-     * Find all nodes that have source inside the subgraph view, and outNeighbor outside.
+     * Find all nodes in (V - S) that have source inside the subgraph view, and outNeighbor outside.
      */
-    std::set<node> boundary();
+    std::set<node> frontier();
 
     /**
      * Construct an explicit mutable subgraph equivalent to this view.
