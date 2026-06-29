@@ -55,8 +55,7 @@ protected:
     };
     std::vector<NodeSubset> subsetVariants(const Graph &G) const;
     GraphW inducedSubgraph(const Graph &G, const std::set<node> &subset) const;
-
-    count countSelfLoopsManually(const InducedSubgraphView &G);
+    void expectGraphsEqual(const Graph &expected, const Graph &actual) const;
 };
 
 INSTANTIATE_TEST_SUITE_P(InstantiationName, InducedSubgraphViewGTest,
@@ -129,14 +128,28 @@ GraphW InducedSubgraphViewGTest::inducedSubgraph(const Graph &G,
     return GraphTools::subgraphFromNodes(G, subset.begin(), subset.end());
 }
 
-count InducedSubgraphViewGTest::countSelfLoopsManually(const InducedSubgraphView &G) {
-    count c = 0;
-    G.getOriginalGraph().forEdges([&](node u, node v) {
-        if (u == v && G.getNodeSubset().contains(u)) {
-            c += 1;
-        }
-    });
-    return c;
+void InducedSubgraphViewGTest::expectGraphsEqual(const Graph &expected, const Graph &actual) const {
+    EXPECT_EQ(expected.isWeighted(), actual.isWeighted());
+    EXPECT_EQ(expected.isDirected(), actual.isDirected());
+    EXPECT_EQ(expected.numberOfNodes(), actual.numberOfNodes());
+    EXPECT_EQ(expected.numberOfEdges(), actual.numberOfEdges());
+    EXPECT_EQ(expected.upperNodeIdBound(), actual.upperNodeIdBound());
+
+    std::set<node> expectedNodes, actualNodes;
+    expected.forNodes([&](node u) { expectedNodes.insert(u); });
+    actual.forNodes([&](node u) { actualNodes.insert(u); });
+    EXPECT_EQ(expectedNodes, actualNodes);
+
+    auto edges = [](const Graph &g) {
+        std::multiset<std::tuple<node, node, edgeweight>> s;
+        g.forEdges([&](node u, node v, edgeweight w) {
+            node a = g.isDirected() ? u : std::min(u, v);
+            node b = g.isDirected() ? v : std::max(u, v);
+            s.insert({a, b, w});
+        });
+        return s;
+    };
+    EXPECT_EQ(edges(expected), edges(actual));
 }
 
 void InducedSubgraphViewGTest::SetUp() {
@@ -179,9 +192,67 @@ void InducedSubgraphViewGTest::SetUp() {
     }
 }
 
-/** CONSTRUCTORS **/
+/** VIEW OPERATIONS **/
 
-// TODO
+TEST_P(InducedSubgraphViewGTest, testFrontier) {
+    {
+        InducedSubgraphView G(Ghouse, {0, 2});
+        if (isDirected()) {
+            EXPECT_EQ((std::set<node>{1, 4}), G.frontier());
+        } else {
+            EXPECT_EQ((std::set<node>{1, 3, 4}), G.frontier());
+        }
+    }
+    {
+        InducedSubgraphView G(Ghouse, {0, 1, 2});
+        if (isDirected()) {
+            EXPECT_EQ((std::set<node>{4}), G.frontier());
+        } else {
+            EXPECT_EQ((std::set<node>{3, 4}), G.frontier());
+        }
+    }
+    {
+        InducedSubgraphView G(Ghouse, {0, 1, 2, 3, 4});
+        EXPECT_EQ(std::set<node>{}, G.frontier());
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testRealize) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+
+        GraphW expectedKeep = inducedSubgraph(Ghouse, variant.nodes);
+        expectGraphsEqual(expectedKeep, Gv.realize());
+        expectGraphsEqual(expectedKeep, Gv.realize(false));
+
+        GraphW expectedCompact =
+            GraphTools::subgraphFromNodes(Ghouse, variant.nodes.begin(), variant.nodes.end(), true);
+        GraphW compact = Gv.realize(true);
+        expectGraphsEqual(expectedCompact, compact);
+        EXPECT_EQ(variant.nodes.size(), compact.numberOfNodes());
+        EXPECT_EQ(variant.nodes.size(), compact.upperNodeIdBound());
+    }
+}
+
+TEST_P(InducedSubgraphViewGTest, testCopyAndMove) {
+    InducedSubgraphView original(Ghouse, someNodes(Ghouse, 3));
+
+    InducedSubgraphView copy(original);
+    EXPECT_EQ(original.getNodeSubset(), copy.getNodeSubset());
+    expectGraphsEqual(original.realize(), copy.realize());
+
+    const count originalCount = original.numberOfNodes();
+    copy.removeNodes({*copy.getNodeSubset().begin()});
+    EXPECT_EQ(originalCount, original.numberOfNodes());
+    EXPECT_NE(original.getNodeSubset(), copy.getNodeSubset());
+
+    InducedSubgraphView source(Ghouse, someNodes(Ghouse, 4));
+    std::set<node> expectedSubset = source.getNodeSubset();
+    InducedSubgraphView moved(std::move(source));
+    EXPECT_EQ(expectedSubset, moved.getNodeSubset());
+    expectGraphsEqual(inducedSubgraph(Ghouse, expectedSubset), moved.realize());
+}
 
 /** NODE MODIFIERS **/
 
@@ -577,20 +648,18 @@ TEST_P(InducedSubgraphViewGTest, testEdgeIterator) {
         auto preIter = G.edgeRange().begin();
         auto postIter = G.edgeRange().begin();
 
-        count edges = 0;
         G.forEdges([&](node, node) {
             ASSERT_EQ(preIter, postIter);
             const auto edge = *preIter;
             ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
             ++preIter;
             postIter++;
-            ++edges;
         });
 
         ASSERT_EQ(preIter, G.edgeRange().end());
         ASSERT_EQ(postIter, G.edgeRange().end());
 
-        edges = 0;
+        count edges = 0;
         for (const auto edge : InducedSubgraphView::EdgeRange(G)) {
             ASSERT_TRUE(G.hasEdge(edge.u, edge.v));
             ++edges;
@@ -1052,18 +1121,5 @@ TEST_P(InducedSubgraphViewGTest, testForWeightedInEdgesOf) {
         }
     }
 }
-/*
- * ----------------------------------------------------------------------------
- * Conversion in progress. Remaining GraphW-derived tests are not yet translated.
- *
- * Tests intentionally DROPPED (a read-only view cannot exercise them):
- *   - graph mutation: testRestoreNode, testIsIsolated, testAddEdge, testRemoveEdge,
- *     testRemoveAllEdges, testRemoveSelfLoops, testRemoveMultiEdges, testSetWeight,
- *     increaseWeight, testSelfLoopConversion, testCheckConsistency_MultiEdgeDetection
- *   - edge ids / indexed graphs: testEdgeIndexGeneration*, testEdgeIndexResolver,
- *     testFor*EdgesWithIds, testParallelFor*EdgesWithIds, testSortEdges, testEdgeIds*
- *   - neighbor reordering: all testSortNeighbors*
- * ----------------------------------------------------------------------------
- */
 
 } /* namespace NetworKit */
