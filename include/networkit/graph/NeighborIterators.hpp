@@ -7,6 +7,7 @@
 #ifndef NETWORKIT_GRAPH_NEIGHBOR_ITERATORS_HPP_
 #define NETWORKIT_GRAPH_NEIGHBOR_ITERATORS_HPP_
 
+#include <iterator>
 namespace NetworKit {
 
 /**
@@ -29,7 +30,7 @@ public:
     using pointer = value_type *;
 
     // STL iterator category.
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::bidirectional_iterator_tag;
 
     // Signed integer type of the result of subtracting two pointers,
     // required by STL.
@@ -103,7 +104,7 @@ public:
     using pointer = value_type *;
 
     // STL iterator category.
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::bidirectional_iterator_tag;
 
     // Signed integer type of the result of subtracting two pointers,
     // required by STL.
