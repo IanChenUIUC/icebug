@@ -50,6 +50,7 @@ protected:
     // count storedNumberOfSelfLoops;
     // bool weighted;
     // bool directed;
+    // node z;
 
 public:
     /**
