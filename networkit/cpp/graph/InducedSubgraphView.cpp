@@ -16,12 +16,15 @@ namespace NetworKit {
 InducedSubgraphView::InducedSubgraphView(const Graph &originalGraph, const std::set<node> &subset)
     : Graph(0, originalGraph.isWeighted(), originalGraph.isDirected()),
       originalGraph(originalGraph) {
+    z = originalGraph.upperNodeIdBound();
     addNodes(subset);
 }
 
 std::set<node> InducedSubgraphView::frontier() {
     std::set<node> result;
     for (node u : nodeSubset) {
+        if (degree(u) == originalGraph.get().degree(u))
+            continue;
         originalGraph.get().forNeighborsOf(u, [&](node v) {
             if (!hasNode(v))
                 result.insert(v);

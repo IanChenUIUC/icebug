@@ -17,6 +17,7 @@
 #include <networkit/auxiliary/Log.hpp>
 #include <networkit/auxiliary/NumericTools.hpp>
 #include <networkit/auxiliary/Parallel.hpp>
+#include <networkit/centrality/CoreDecomposition.hpp>
 #include <networkit/generators/ErdosRenyiGenerator.hpp>
 #include <networkit/graph/Graph.hpp>
 #include <networkit/graph/GraphBuilder.hpp>
@@ -1119,6 +1120,24 @@ TEST_P(InducedSubgraphViewGTest, testForWeightedInEdgesOf) {
             });
             EXPECT_EQ(ref, seen);
         }
+    }
+}
+
+/** COMPATIBILITY WITH ALGORITHMS **/
+
+TEST_P(InducedSubgraphViewGTest, testCoreDecomp) {
+    for (const auto &variant : subsetVariants(Ghouse)) {
+        SCOPED_TRACE(variant.label);
+        InducedSubgraphView Gv(Ghouse, variant.nodes);
+        GraphW expected = inducedSubgraph(Ghouse, variant.nodes);
+
+        auto coreDecompView = CoreDecomposition(Gv);
+        auto coreDecomp = CoreDecomposition(expected);
+        coreDecompView.run();
+        coreDecomp.run();
+
+        for (node u : variant.nodes)
+            EXPECT_DOUBLE_EQ(coreDecomp.score(u), coreDecompView.score(u));
     }
 }
 

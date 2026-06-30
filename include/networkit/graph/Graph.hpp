@@ -1473,7 +1473,7 @@ public:
 template <typename L>
 void Graph::forNodes(L handle) const {
     for (node v = 0; v < z; ++v) {
-        if (exists[v]) {
+        if (hasNode(v)) {
             handle(v);
         }
     }
@@ -1491,7 +1491,7 @@ void Graph::parallelForNodes(L handle) const {
         // For mutable graphs, check exists
 #pragma omp parallel for
         for (omp_index v = 0; v < static_cast<omp_index>(z); ++v) {
-            if (exists[v]) {
+            if (hasNode(v)) {
                 handle(v);
             }
         }
@@ -1501,7 +1501,7 @@ void Graph::parallelForNodes(L handle) const {
 template <typename C, typename L>
 void Graph::forNodesWhile(C condition, L handle) const {
     for (node v = 0; v < z; ++v) {
-        if (exists[v]) {
+        if (hasNode(v)) {
             if (!condition()) {
                 break;
             }
@@ -1534,7 +1534,7 @@ void Graph::balancedParallelForNodes(L handle) const {
         // For mutable graphs, check exists
 #pragma omp parallel for schedule(guided)
         for (omp_index v = 0; v < static_cast<omp_index>(z); ++v) {
-            if (exists[v]) {
+            if (hasNode(v)) {
                 handle(v);
             }
         }
@@ -1544,9 +1544,9 @@ void Graph::balancedParallelForNodes(L handle) const {
 template <typename L>
 void Graph::forNodePairs(L handle) const {
     for (node u = 0; u < z; ++u) {
-        if (exists[u]) {
+        if (hasNode(u)) {
             for (node v = u + 1; v < z; ++v) {
-                if (exists[v]) {
+                if (hasNode(v)) {
                     handle(u, v);
                 }
             }
@@ -1568,9 +1568,9 @@ void Graph::parallelForNodePairs(L handle) const {
         // For mutable graphs, check exists
 #pragma omp parallel for schedule(guided)
         for (omp_index u = 0; u < static_cast<omp_index>(z); ++u) {
-            if (exists[u]) {
+            if (hasNode(u)) {
                 for (node v = u + 1; v < z; ++v) {
-                    if (exists[v]) {
+                    if (hasNode(v)) {
                         handle(u, v);
                     }
                 }
@@ -1678,7 +1678,7 @@ inline void Graph::forOutEdgesOfImpl(node u, L handle) const {
     } else {
         // Vector-based graphs should use GraphW
         // Check exists for mutable graphs
-        if (!exists[u])
+        if (!hasNode(u))
             return;
         throw std::runtime_error("forOutEdgesOfImpl not supported for vector-based graphs in base "
                                  "Graph class - use GraphW");
