@@ -21,7 +21,8 @@
 
 namespace NetworKit {
 
-LocalKCore::LocalKCore(const Graph &g) : SelectiveCommunityDetector(g) {}
+LocalKCore::LocalKCore(const Graph &g, const std::string &logFile)
+    : SelectiveCommunityDetector(g), logFile(logFile) {}
 
 count hindex(const Graph &g, node u, const std::unordered_map<node, count> &uppers,
              std::vector<count> &buf) {
@@ -76,6 +77,31 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
 
     TRACE("expandOneCommunity called on ", s);
 
+    const bool doLog = !logFile.empty();
+    count timeHIndex = 0;    // (us) step (b): h-index + count/push maintenance
+    count timeLower = 0;     // (us) step (c): SteinerKCore::queryCoreness + prune sweep
+    count timeFinal = 0;     // (us) final SteinerKCore::expandOneCommunity
+    count timeOther = 0;     // (us) derived: total - (hindex + lower + final)
+    count totalExplored = 0; // distinct nodes ever admitted
+
+    // (admissions, lb) sampled at each refresh; only populated when logging
+    std::vector<std::pair<count, count>> lbCurve;
+
+    Aux::Timer total;   // whole-function wall clock
+    Aux::Timer section; // reused per bucketed section
+    if (doLog)
+        total.start();
+    auto tic = [&]() {
+        if (doLog)
+            section.start();
+    };
+    auto toc = [&](count &bucket) {
+        if (doLog) {
+            section.stop();
+            bucket += section.elapsedMicroseconds();
+        }
+    };
+
     // 1. BFS until find connected subgraph containing s
     InducedSubgraphView subg = connectedSubgraph(*g, s);
 
@@ -83,6 +109,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     count lb = 0;
     std::unordered_map<node, count> ub;
     subg.forNodes([&](node u) { ub[u] = g->degree(u); });
+    totalExplored = subg.numberOfNodes(); // seed + connector already admitted
 
     count vol = 2 * subg.numberOfEdges();
     count threshold = 0;
@@ -141,6 +168,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
             // add to the queue for the next phase
             for (node u : frontier) {
                 subg.addNode(u);
+                ++totalExplored;
                 vol += 2 * subg.degree(u);
                 compute_count(u);
                 subg.forNeighborsOf(u, [&](node v) { counts[v] += ub[u] >= ub[v]; });
@@ -151,8 +179,9 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
             TRACE("[LOCAL KCORE] Added ", frontier, " to frontier");
         }
 
-        // b) update the upper-bounds of all nodes
+        // b) update the upper-bounds of all nodes  ---- hindex ----
         // TODO: convert to vector and parallelize, if there are enough nodes
+        tic();
         for (index i = 0; i < iters; ++i) {
             node u = pop();
             if (pruned[u])
@@ -174,11 +203,16 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
                 });
             }
         }
+        toc(timeHIndex);
 
-        // c) if threshold passes: update lower bounds and prune
+        // c) if threshold passes: update lower bounds and prune  ---- lower ----
         if (vol > threshold) {
+            tic();
             threshold = 2 * vol;
             lb = SteinerKCore(subg).queryCoreness(s);
+
+            if (doLog)
+                lbCurve.emplace_back(totalExplored, lb);
 
             std::vector<node> toPrune;
             subg.forNodes([&](node v) {
@@ -190,11 +224,48 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
 
             TRACE("[LOCAL KCORE] Triggered lowerbound update to ", lb);
             TRACE("[LOCAL KCORE] Pruned ", toPrune);
+            toc(timeLower);
         }
     }
 
+    // ---- final ----
+    tic();
     TRACE("[LOCAL KCORE] Final search on ", subg.getNodeSubset());
-    return SteinerKCore(subg).expandOneCommunity(s);
+    std::set<node> result = SteinerKCore(subg).expandOneCommunity(s);
+    toc(timeFinal);
+
+    if (doLog) {
+        total.stop();
+        count timeTotal = total.elapsedMicroseconds();
+        timeOther = timeTotal - timeHIndex - timeLower - timeFinal;
+
+        std::ofstream out(logFile, std::ios::app);
+        if (!out)
+            throw std::runtime_error("LocalKCore: cannot open logFile " + logFile);
+
+        out << "query_size=" << s.size() << '\n'
+            << "total_explored=" << totalExplored << '\n'
+            << "community_size=" << result.size() << '\n'
+            << "waste=" << (totalExplored - result.size()) << '\n'
+            << "final_lb=" << lb << '\n';
+
+        out << "lb_curve=";
+        for (size_t i = 0; i < lbCurve.size(); ++i) {
+            if (i)
+                out << ';';
+            out << lbCurve[i].first << ':' << lbCurve[i].second;
+        }
+        out << '\n';
+
+        out << "time_hindex_us=" << timeHIndex << '\n'
+            << "time_lower_us=" << timeLower << '\n'
+            << "time_final_us=" << timeFinal << '\n'
+            << "time_other_us=" << timeOther << '\n'
+            << "time_total_us=" << timeTotal << '\n'
+            << "---\n";
+    }
+
+    return result;
 }
 
 } // namespace NetworKit

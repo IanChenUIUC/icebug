@@ -22,8 +22,9 @@ public:
      * Constructs the Local KCore algorithm.
      *
      * @param[in] G The graph to detect communities on
+     * @param[in] logFile
      */
-    LocalKCore(const Graph &g);
+    LocalKCore(const Graph &g, const std::string &logFile = "");
 
     /**
      * Expands a set of seed nodes into a community.
@@ -36,6 +37,9 @@ public:
     // std::set<node> expandOneCommunity(node s) override;
 
     using SelectiveCommunityDetector::expandOneCommunity;
+
+private:
+    const std::string &logFile;
 };
 
 } // namespace NetworKit
