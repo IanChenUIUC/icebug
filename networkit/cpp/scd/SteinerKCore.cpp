@@ -6,6 +6,8 @@
  */
 
 #include <stdexcept>
+#include "networkit/centrality/CoreDecomposition.hpp"
+#include "networkit/graph/InducedSubgraphView.hpp"
 #include <networkit/auxiliary/BucketPQ.hpp>
 #include <networkit/scd/SelectiveCommunityDetector.hpp>
 #include <networkit/scd/SteinerKCore.hpp>
@@ -16,8 +18,22 @@ namespace NetworKit {
 SteinerKCore::SteinerKCore(const Graph &g, const std::vector<count> &coreness)
     : SelectiveCommunityDetector(g), coreness(coreness) {}
 
+SteinerKCore::SteinerKCore(const Graph &g) : SelectiveCommunityDetector(g) {
+    CoreDecomposition cd(g);
+    cd.run();
+    std::vector<double> scores = cd.scores();
+    coreness = std::vector<count>(scores.begin(), scores.end());
+}
+
 std::set<node> SteinerKCore::expandOneCommunity(const std::set<node> &s) {
     return run({s})[0];
+}
+
+count SteinerKCore::queryCoreness(const std::set<node> &s) {
+    InducedSubgraphView subg(*g, expandOneCommunity(s));
+    count retval = none;
+    subg.forNodes([&](node u) { retval = std::min(retval, subg.degree(u)); });
+    return retval;
 }
 
 template <class Key, class Value, class F>
@@ -60,8 +76,8 @@ auto changeKey = [](auto &m, node from, node to) {
 };
 
 std::vector<std::set<node>> SteinerKCore::run(const std::vector<std::set<node>> &s) {
-    UnionFindSubset uf(g->numberOfNodes());
-    BucketPQ pq(g->numberOfNodes(), 0, static_cast<int64_t>(g->numberOfNodes() - 1));
+    UnionFindSubset uf(g->upperNodeIdBound());
+    BucketPQ pq(g->upperNodeIdBound(), 0, static_cast<int64_t>(g->numberOfNodes() - 1));
     std::map<node, CountMap> counts; // counts[componentRepr][queryIdx]
 
     std::vector<std::vector<index>> singletons(g->numberOfNodes());
@@ -77,7 +93,7 @@ std::vector<std::set<node>> SteinerKCore::run(const std::vector<std::set<node>> 
     }
 
     std::vector<std::set<node>> output(s.size());
-    std::vector<bool> visited(g->numberOfNodes(), 0);
+    std::vector<bool> visited(g->upperNodeIdBound(), 0);
     count completed = 0;
     while (completed < s.size()) {
         if (pq.empty())

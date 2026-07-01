@@ -17,19 +17,21 @@
 #include <set>
 #include <stdexcept>
 #include <unordered_map>
+#include "networkit/auxiliary/Log.hpp"
 
 namespace NetworKit {
 
 LocalKCore::LocalKCore(const Graph &g) : SelectiveCommunityDetector(g) {}
 
-count hindex(const Graph &g, node u, const std::vector<count> &uppers, std::vector<count> &buf) {
+count hindex(const Graph &g, node u, const std::unordered_map<node, count> &uppers,
+             std::vector<count> &buf) {
     if (g.degree(u) == 0)
         return 0;
 
     buf.resize(0);
     buf.resize(g.degree(u) + 1); // zero-out
 
-    g.forNeighborsOf(u, [&](node v) { ++buf[std::min(uppers[v], g.degree(u))]; });
+    g.forNeighborsOf(u, [&](node v) { ++buf[std::min(uppers.at(v), g.degree(u))]; });
     count sum = 0, retval = g.degree(u);
     do {
         sum += buf[retval];
@@ -50,44 +52,46 @@ InducedSubgraphView connectedSubgraph(const Graph &g, const std::set<node> &s) {
     return subg;
 }
 
-InducedSubgraphView componentOf(const Graph &g, node u) {
-    InducedSubgraphView subg(g, {u});
-    std::set<node> nbr;
-    do {
-        nbr = std::move(subg.frontier());
-        subg.addNodes(nbr);
-    } while (!nbr.empty());
-    return subg;
+template <typename T>
+std::string toString(tlx::RingBuffer<T> rb) {
+    std::ostringstream oss;
+    oss << "[";
+
+    bool first = true;
+    while (!rb.empty()) {
+        if (!first)
+            oss << ", ";
+        first = false;
+
+        oss << rb.front();
+        rb.pop_front();
+    }
+
+    oss << "]";
+    return oss.str();
 }
 
 std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     assert(!s.empty());
+
+    TRACE("expandOneCommunity called on ", s);
 
     // 1. BFS until find connected subgraph containing s
     InducedSubgraphView subg = connectedSubgraph(*g, s);
 
     // 2. initiate all variables
     count lb = 0;
-    std::vector<count> ub(g->upperNodeIdBound());
+    std::unordered_map<node, count> ub;
     subg.forNodes([&](node u) { ub[u] = g->degree(u); });
 
-    count vol = s.size();
+    count vol = 2 * subg.numberOfEdges();
     count threshold = 0;
 
+    // TODO: dynamically resizing the queue might be a good idea, to account for local
+    tlx::RingBuffer<node> queue(g->numberOfNodes());
     std::vector<bool> inQueue(g->upperNodeIdBound());
     std::vector<bool> pruned(g->upperNodeIdBound());
-    tlx::RingBuffer<node> queue(g->numberOfNodes());
     std::unordered_map<node, count> counts;
-
-    auto compute_nbr_counts = [&](node u) {
-        auto nbr = subg.neighborRange(u);
-        counts[u] = std::count_if(nbr.begin(), nbr.end(), [&](node v) { return ub[v] >= ub[u]; });
-    };
-
-    auto remove_node = [&](node u) {
-        subg.removeNode(u);
-        pruned[u] = true;
-    };
 
     auto push = [&](node u) {
         inQueue[u] = true;
@@ -101,6 +105,20 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
         return u;
     };
 
+    auto compute_count = [&](node u) {
+        auto nbr = subg.neighborRange(u);
+        counts[u] = std::count_if(nbr.begin(), nbr.end(), [&](node v) { return ub[v] >= ub[u]; });
+    };
+
+    auto remove_node = [&](node u) {
+        pruned[u] = true;
+        subg.forNeighborsOf(u, [&](node v) {
+            if (ub[u] >= ub[v] && --counts[v] < ub[v] && !inQueue[v])
+                push(v);
+        });
+        subg.removeNode(u);
+    };
+
     // 3. loop until convergence (or found bound, if maximal is not set to True):
     // | a) add the frontier
     // | b) update upper-bounds on all nodes
@@ -108,45 +126,50 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     std::vector<count> buf;
     bool frontierDone = false;
     subg.forNodes([&](node u) { push(u); });
-    while (queue.size() && !frontierDone) {
+    while (queue.size() || !frontierDone) {
         // store the nodes that will be get h-index propagated in this round
         count iters = queue.size();
+        TRACE("[LOCAL KCORE] queue = ", toString(queue));
 
         // a) add the frontier
         if (!frontierDone) {
             std::set<node> frontier = subg.frontier();
-            frontierDone = frontier.empty();
+            std::erase_if(frontier, [&](node u) {
+                return pruned[u] || (pruned[u] = (ub[u] = g->degree(u)) < lb);
+            });
 
             // add to the queue for the next phase
-            vol += frontier.size();
             for (node u : frontier) {
-                if (pruned[u])
-                    continue;
-                ub[u] = g->degree(u);
                 subg.addNode(u);
-                compute_nbr_counts(u);
+                vol += 2 * subg.degree(u);
+                compute_count(u);
+                subg.forNeighborsOf(u, [&](node v) { counts[v] += ub[u] >= ub[v]; });
                 push(u);
             }
+
+            frontierDone = frontier.empty();
+            TRACE("[LOCAL KCORE] Added ", frontier, " to frontier");
         }
 
         // b) update the upper-bounds of all nodes
         // TODO: convert to vector and parallelize, if there are enough nodes
         for (index i = 0; i < iters; ++i) {
             node u = pop();
-
             if (pruned[u])
                 continue;
 
             // update u
             count kold = ub[u];
-            count knew = ub[u] = hindex(*g, u, ub, buf);
+            count knew = ub[u] = hindex(subg, u, ub, buf);
             if (knew < lb) {
+                TRACE("[LOCAL KCORE] Removed ", u);
                 remove_node(u);
             } else if (knew < kold) {
+                TRACE("[LOCAL KCORE] Updated coreness of node ", u, " to ", knew);
                 // update nbr(u)
-                compute_nbr_counts(u);
+                compute_count(u);
                 subg.forNeighborsOf(u, [&](node v) {
-                    if (knew < ub[v] && ub[v] <= kold && !inQueue[v] && --counts[v] < ub[v])
+                    if (knew < ub[v] && ub[v] <= kold && --counts[v] < ub[v] && !inQueue[v])
                         push(v);
                 });
             }
@@ -155,10 +178,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
         // c) if threshold passes: update lower bounds and prune
         if (vol > threshold) {
             threshold = 2 * vol;
-
-            auto ks = CoreDecomposition(subg, false, true);
-            ks.run();
-            subg.forNodes([&](node v) { lb = std::min(lb, static_cast<count>(ks.score(v))); });
+            lb = SteinerKCore(subg).queryCoreness(s);
 
             std::vector<node> toPrune;
             subg.forNodes([&](node v) {
@@ -167,15 +187,14 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
             });
             for (auto v : toPrune)
                 remove_node(v);
+
+            TRACE("[LOCAL KCORE] Triggered lowerbound update to ", lb);
+            TRACE("[LOCAL KCORE] Pruned ", toPrune);
         }
     }
 
-    auto ks = CoreDecomposition(subg, false, true);
-    ks.run();
-    auto scores = ks.scores();
-    std::vector<count> aa(scores.begin(), scores.end());
-    auto steiner = SteinerKCore(subg, aa);
-    return steiner.expandOneCommunity(s);
+    TRACE("[LOCAL KCORE] Final search on ", subg.getNodeSubset());
+    return SteinerKCore(subg).expandOneCommunity(s);
 }
 
 } // namespace NetworKit

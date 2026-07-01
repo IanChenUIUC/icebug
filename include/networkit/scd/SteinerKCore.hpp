@@ -27,6 +27,16 @@ public:
      */
     SteinerKCore(const Graph &g, const std::vector<count> &coreness);
 
+    SteinerKCore(const Graph &g);
+
+    /**
+     * Find the coreness of the query set.
+     *
+     * @param[in] s The seed nodes
+     * @return Minimum degree of the output of expandOneCommunity
+     */
+    count queryCoreness(const std::set<node> &s);
+
     /**
      * Expands a set of seed nodes into a community.
      *

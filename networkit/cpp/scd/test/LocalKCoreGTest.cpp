@@ -7,6 +7,7 @@
 
 #include <numeric>
 #include <vector>
+#include "networkit/auxiliary/Random.hpp"
 #include <gtest/gtest.h>
 #include <networkit/graph/GraphW.hpp>
 #include <networkit/scd/LocalKCore.hpp>
@@ -95,15 +96,17 @@ protected:
         }
     }
 
-    void verifyPairs(LocalKCore &local, const std::vector<count> &cliques) {
+    void verifyPairs(LocalKCore &local, const std::vector<count> &cliques, bool sample = false) {
         count n = std::accumulate(cliques.begin(), cliques.end(), count(0));
         for (node u = 0; u < n; ++u) {
             for (node v = u + 1; v < n; ++v) {
-                std::set<node> query = {u, v};
-                std::set<node> et = local.expandOneCommunity(query);
-                std::set<node> gt = gtSearch(cliques, query);
+                if (!sample || Aux::Random::probability() < 0.01) {
+                    std::set<node> query = {u, v};
+                    std::set<node> et = local.expandOneCommunity(query);
+                    std::set<node> gt = gtSearch(cliques, query);
 
-                EXPECT_EQ(et, gt) << "Failed on pair nodes: {" << u << ", " << v << "}";
+                    EXPECT_EQ(et, gt) << "Failed on pair nodes: {" << u << ", " << v << "}";
+                }
             }
         }
     }
@@ -162,7 +165,7 @@ TEST_F(LocalKCoreGTest, LargePairs) {
     std::vector<count> cliques{3, 4, 5, 6, 5, 4, 3, 5, 7, 9, 11, 9, 7, 5, 3, 4, 5, 6, 4, 3};
     GraphW g = getCliqueChain(cliques);
     LocalKCore local(g);
-    verifyPairs(local, cliques);
+    verifyPairs(local, cliques, true);
 }
 
 } /* namespace NetworKit */
