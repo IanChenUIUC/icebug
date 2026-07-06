@@ -20,7 +20,6 @@
 // TODO: add an option to make the IDs contiguous
 
 namespace NetworKit {
-
 /**
  * @ingroup graph
  * InducedSubgraphView - Zero-copy induced subgraph.
@@ -102,6 +101,10 @@ public:
      */
     InducedSubgraphView &operator=(const InducedSubgraphView &other) {
         Graph::operator=(other);
+        originalGraph = other.originalGraph;
+        nodeSubset = other.nodeSubset;
+        inducedDegree = other.inducedDegree;
+        inducedInDegree = other.inducedInDegree;
         return *this;
     }
 
@@ -243,13 +246,7 @@ public:
     count degree(node v) const override;
     count degreeIn(node v) const override;
     bool isIsolated(node v) const override;
-    edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const override;
-    edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const override;
-
-    index upperNodeIdBound() const noexcept;
-
-    bool hasNode(node v) const noexcept override;
-    bool hasEdge(node u, node v) const noexcept override;
+    bool hasEdgeImpl(node u, node v) const noexcept override;
     edgeweight weight(node u, node v) const override;
 
     // FIXME: NOT PLANNED TO IMPLEMENT
@@ -556,30 +553,61 @@ void InducedSubgraphView::forNodePairs(L handle) const {
 
 template <typename L>
 void InducedSubgraphView::parallelForNodes(L handle) const {
-    WARN("parallelForNodes not implemented for InducedSubgraphView... fallback to sequential");
-    return forNodes(handle);
+#pragma omp parallel
+    {
+#pragma omp single
+        {
+            for (auto iter = nodeSubset.begin(); iter != nodeSubset.end(); ++iter) {
+#pragma omp task
+                handle(*iter);
+            }
+        }
+    }
 }
 
 template <typename L>
 void InducedSubgraphView::balancedParallelForNodes(L handle) const {
-    WARN("balancedParallelForNodes not implemented for InducedSubgraphView... fallback to "
-         "sequential");
-    return forNodes(handle);
+    WARN("balanced iteration requires collecting into vector; use parallelForNodes to avoid this");
+    std::vector<node> nodes(nodeSubset.begin(), nodeSubset.end());
+#pragma omp parallel for schedule(guided)
+    for (index i = 0; i < nodes.size(); ++i)
+        handle(nodes[i]);
 }
 
 template <typename L>
 void InducedSubgraphView::parallelForNodePairs(L handle) const {
-    WARN("parallelForNodePairs not implemented for InducedSubgraphView... fallback to "
-         "sequential");
-    return forNodePairs(handle);
+#pragma omp parallel
+    {
+#pragma omp single
+        {
+            for (auto it1 = nodeSubset.begin(); it1 != nodeSubset.end(); ++it1) {
+#pragma omp task firstprivate(it1)
+                {
+                    for (auto it2 = std::next(it1); it2 != nodeSubset.end(); ++it2) {
+                        handle(*it1, *it2);
+                    }
+                }
+            }
+        }
+    }
 }
 
 template <typename L>
 double InducedSubgraphView::parallelSumForNodes(L handle) const {
-    WARN("parallelSumForNodes not implemented for InducedSubgraphView... fallback to "
-         "sequential");
     double sum = 0.0;
-    forNodes([&](node u) { sum += handle(u); });
+#pragma omp parallel
+    {
+#pragma omp single
+        {
+#pragma omp taskgroup task_reduction(+ : sum)
+            {
+                for (auto it = nodeSubset.begin(); it != nodeSubset.end(); ++it) {
+#pragma omp task in_reduction(+ : sum) firstprivate(it)
+                    sum += handle(*it);
+                }
+            }
+        }
+    }
     return sum;
 }
 

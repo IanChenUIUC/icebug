@@ -17,6 +17,7 @@ InducedSubgraphView::InducedSubgraphView(const Graph &originalGraph, const std::
     : Graph(0, originalGraph.isWeighted(), originalGraph.isDirected()),
       originalGraph(originalGraph) {
     z = originalGraph.upperNodeIdBound();
+    exists.resize(z);
     addNodes(subset);
 }
 
@@ -43,30 +44,12 @@ count InducedSubgraphView::degreeIn(node v) const {
     return isDirected() ? inducedInDegree.at(v) : degree(v);
 };
 
-edgeweight InducedSubgraphView ::weightedDegree(node u, bool countSelfLoopsTwice) const {
-    assert(hasNode(u));
-    return computeWeightedDegree(u, false, countSelfLoopsTwice);
-}
-
-edgeweight InducedSubgraphView ::weightedDegreeIn(node u, bool countSelfLoopsTwice) const {
-    assert(hasNode(u));
-    return computeWeightedDegree(u, true, countSelfLoopsTwice);
-}
-
-index InducedSubgraphView::upperNodeIdBound() const noexcept {
-    return originalGraph.get().upperNodeIdBound();
-}
-
 bool InducedSubgraphView::isIsolated(node v) const {
     assert(hasNode(v));
     return degree(v) == 0 && (!directed || degreeIn(v) == 0);
 }
 
-bool InducedSubgraphView::hasNode(node v) const noexcept {
-    return nodeSubset.contains(v);
-}
-
-bool InducedSubgraphView::hasEdge(node u, node v) const noexcept {
+bool InducedSubgraphView::hasEdgeImpl(node u, node v) const noexcept {
     return hasNode(u) && hasNode(v) && originalGraph.get().hasEdge(u, v);
 }
 
@@ -80,7 +63,7 @@ void InducedSubgraphView::addNodes(const std::set<node> &subset) {
     for (node v : subset) {
         if (hasNode(v) || !originalGraph.get().hasNode(v))
             continue;
-
+        exists[v] = true;
         nodeSubset.insert(v);
         n += 1;
 
@@ -115,6 +98,7 @@ void InducedSubgraphView::removeNodes(const std::set<node> &subset) {
     for (node v : subset) {
         if (!hasNode(v))
             continue;
+        exists[v] = false;
 
         n -= 1;
         m -= inducedDegree[v];
@@ -151,17 +135,14 @@ GraphW InducedSubgraphView::realize(bool compact) const {
 
 std::vector<node> InducedSubgraphView::getNeighborsVector(node u, bool inEdges) const {
     std::vector<node> result;
-    auto cb = [&](node v) {
-        if (hasNode(v))
-            result.push_back(v);
-    };
+    auto cb = [&](node v) { result.push_back(v); };
 
     if (inEdges) {
         result.reserve(degreeIn(u));
-        originalGraph.get().forInNeighborsOf(u, cb);
+        forInNeighborsOf(u, cb);
     } else {
         result.reserve(degree(u));
-        originalGraph.get().forNeighborsOf(u, cb);
+        forNeighborsOf(u, cb);
     }
 
     return result;
@@ -173,23 +154,21 @@ InducedSubgraphView::getNeighborsWithWeightsVector(node u, bool inEdges) const {
     std::vector<edgeweight> weightVec;
 
     auto cb = [&](node v) {
-        if (hasNode(v)) {
-            nodeVec.push_back(v);
-            if (inEdges)
-                weightVec.push_back(weight(v, u));
-            else
-                weightVec.push_back(weight(u, v));
-        }
+        nodeVec.push_back(v);
+        if (inEdges)
+            weightVec.push_back(weight(v, u));
+        else
+            weightVec.push_back(weight(u, v));
     };
 
     if (inEdges) {
         nodeVec.reserve(degreeIn(u));
         weightVec.reserve(degreeIn(u));
-        originalGraph.get().forInNeighborsOf(u, cb);
+        forInNeighborsOf(u, cb);
     } else {
         nodeVec.reserve(degree(u));
         weightVec.reserve(degree(u));
-        originalGraph.get().forNeighborsOf(u, cb);
+        forNeighborsOf(u, cb);
     }
 
     return {nodeVec, weightVec};
@@ -198,9 +177,12 @@ InducedSubgraphView::getNeighborsWithWeightsVector(node u, bool inEdges) const {
 void InducedSubgraphView::forEdgesVirtualImpl(
     bool directed, bool weighted, bool hasEdgeIds,
     std::function<void(node, node, edgeweight, edgeid)> handle) const {
-    originalGraph.get().forEdges([&](node u, node v, edgeweight w, edgeid x) {
-        if (hasEdge(u, v))
-            handle(u, v, w, x);
+    forNodes([&](node u) {
+        forEdgesOfVirtualImpl(u, directed, weighted, hasEdgeIds,
+                              [&handle, directed](node u, node v, edgeweight w, edgeid x) {
+                                  if (directed || u <= v)
+                                      handle(u, v, w, x);
+                              });
     });
 }
 
@@ -225,8 +207,14 @@ void InducedSubgraphView::forInEdgesOfVirtualImpl(
 double InducedSubgraphView::parallelSumForEdgesVirtualImpl(
     bool directed, bool weighted, bool hasEdgeIds,
     std::function<double(node, node, edgeweight, edgeid)> handle) const {
-    return originalGraph.get().parallelSumForEdges([&](node u, node v, edgeweight w, edgeid x) {
-        return hasEdge(u, v) ? handle(u, v, w, x) : 0;
+    return parallelSumForNodes([&](node u) {
+        double sum = 0.0;
+        forEdgesOfVirtualImpl(u, directed, weighted, hasEdgeIds,
+                              [&](node u, node v, edgeweight w, edgeid x) {
+                                  if (directed || u <= v)
+                                      sum += handle(u, v, w, x);
+                              });
+        return sum;
     });
 }
 
@@ -262,35 +250,6 @@ index InducedSubgraphView::indexInInEdgeArray(node v, node u) const {
 index InducedSubgraphView::indexInOutEdgeArray(node u, node v) const {
     throw std::runtime_error(
         "indexInOutEdgeArray not supported for graph view; realize() into GraphW");
-}
-
-edgeweight InducedSubgraphView::computeWeightedDegree(node u, bool inDegree,
-                                                      bool countSelfLoopsTwice) const {
-    if (weighted) {
-        edgeweight sum = 0.0;
-        auto sumWeights = [&](node v, edgeweight w) {
-            sum += (countSelfLoopsTwice && u == v) ? 2. * w : w;
-        };
-        if (inDegree) {
-            forInNeighborsOf(u, sumWeights);
-        } else {
-            forNeighborsOf(u, sumWeights);
-        }
-        return sum;
-    }
-
-    count sum = inDegree ? degreeIn(u) : degreeOut(u);
-    auto countSelfLoops = [&](node v) { sum += (u == v); };
-
-    if (countSelfLoopsTwice && numberOfSelfLoops()) {
-        if (inDegree) {
-            forInNeighborsOf(u, countSelfLoops);
-        } else {
-            forNeighborsOf(u, countSelfLoops);
-        }
-    }
-
-    return static_cast<edgeweight>(sum);
 }
 
 } // namespace NetworKit

@@ -933,7 +933,7 @@ public:
      * @return @c true if @a v exists, @c false otherwise.
      */
 
-    virtual bool hasNode(node v) const noexcept { return (v < z) && this->exists[v]; }
+    bool hasNode(node v) const noexcept { return (v < z) && this->exists[v]; }
 
     /**
      * Check if edge (u, v) exists in the graph.
@@ -942,7 +942,7 @@ public:
      * @param v Second endpoint of edge.
      * @return @c true if edge exists, @c false otherwise.
      */
-    virtual bool hasEdge(node u, node v) const;
+    bool hasEdge(node u, node v) const;
 
     /**
      * @brief Virtual method for hasEdge - overridden by GraphW for vector-based graphs
@@ -1007,7 +1007,7 @@ public:
      *
      * @return Weighted degree of @a u.
      */
-    virtual edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
+    edgeweight weightedDegree(node u, bool countSelfLoopsTwice = false) const;
 
     /**
      * Returns the weighted in-degree of @a u.
@@ -1017,7 +1017,7 @@ public:
      *
      * @return Weighted in-degree of @a v.
      */
-    virtual edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
+    edgeweight weightedDegreeIn(node u, bool countSelfLoopsTwice = false) const;
 
     /**
      * Returns <code>true</code> if this graph supports edge weights other
@@ -1473,7 +1473,7 @@ public:
 template <typename L>
 void Graph::forNodes(L handle) const {
     for (node v = 0; v < z; ++v) {
-        if (hasNode(v)) {
+        if (exists[v]) {
             handle(v);
         }
     }
@@ -1491,7 +1491,7 @@ void Graph::parallelForNodes(L handle) const {
         // For mutable graphs, check exists
 #pragma omp parallel for
         for (omp_index v = 0; v < static_cast<omp_index>(z); ++v) {
-            if (hasNode(v)) {
+            if (exists[v]) {
                 handle(v);
             }
         }
@@ -1501,7 +1501,7 @@ void Graph::parallelForNodes(L handle) const {
 template <typename C, typename L>
 void Graph::forNodesWhile(C condition, L handle) const {
     for (node v = 0; v < z; ++v) {
-        if (hasNode(v)) {
+        if (exists[v]) {
             if (!condition()) {
                 break;
             }
@@ -1534,7 +1534,7 @@ void Graph::balancedParallelForNodes(L handle) const {
         // For mutable graphs, check exists
 #pragma omp parallel for schedule(guided)
         for (omp_index v = 0; v < static_cast<omp_index>(z); ++v) {
-            if (hasNode(v)) {
+            if (exists[v]) {
                 handle(v);
             }
         }
@@ -1544,9 +1544,9 @@ void Graph::balancedParallelForNodes(L handle) const {
 template <typename L>
 void Graph::forNodePairs(L handle) const {
     for (node u = 0; u < z; ++u) {
-        if (hasNode(u)) {
+        if (exists[u]) {
             for (node v = u + 1; v < z; ++v) {
-                if (hasNode(v)) {
+                if (exists[v]) {
                     handle(u, v);
                 }
             }
@@ -1568,9 +1568,9 @@ void Graph::parallelForNodePairs(L handle) const {
         // For mutable graphs, check exists
 #pragma omp parallel for schedule(guided)
         for (omp_index u = 0; u < static_cast<omp_index>(z); ++u) {
-            if (hasNode(u)) {
+            if (exists[u]) {
                 for (node v = u + 1; v < z; ++v) {
-                    if (hasNode(v)) {
+                    if (exists[v]) {
                         handle(u, v);
                     }
                 }
@@ -1678,7 +1678,7 @@ inline void Graph::forOutEdgesOfImpl(node u, L handle) const {
     } else {
         // Vector-based graphs should use GraphW
         // Check exists for mutable graphs
-        if (!hasNode(u))
+        if (!exists[u])
             return;
         throw std::runtime_error("forOutEdgesOfImpl not supported for vector-based graphs in base "
                                  "Graph class - use GraphW");
@@ -1732,7 +1732,7 @@ inline void Graph::forInEdgesOfImpl(node u, L handle) const {
     } else {
         // For vector-based graphs (GraphW), use the virtual dispatch
         // Check exists for mutable graphs
-        if (!hasNode(u))
+        if (!exists[u])
             return;
         // GraphW's forInEdgesVirtualImpl calls handle(v, u, ...) where v is neighbor and u is
         // current node We need to swap so that edgeLambda receives (current, neighbor, ...) and
@@ -1938,7 +1938,7 @@ void Graph::forEdgesOf(node u, L handle) const {
     } else {
         // For vector-based graphs (GraphW), use the virtual dispatch
         // Check exists for mutable graphs
-        if (!hasNode(u))
+        if (!exists[u])
             return;
         // For vector-based graphs, use virtual dispatch
         forEdgesOfVirtualImpl(u, directed, weighted, edgesIndexed,
