@@ -20,8 +20,8 @@ def build_demo_graph():
 
 
 def main():
-    components = Path("output") / "shellstruct.components.parquet"
-    tree = Path("output") / "shellstruct.tree.parquet"
+    components = Path("output") / "shellstruct.components.feather"
+    tree = Path("output") / "shellstruct.tree.feather"
 
     graph = build_demo_graph()
     shell = ShellStruct(graph)
@@ -33,17 +33,29 @@ def main():
         print("Building shellstruct...")
         shell.build()
 
-    seed = {0, 1}
+    size = 0
+
+    def count(_):
+        nonlocal size
+        size += 1
+
+    seed, size = {0, 1}, 0
     comm = shell.expandOneCommunity(seed)
+    shell.forCommunity(seed, count)
     print(f"Comm for {seed}:", comm)  # 0, 1 connected 2-shell but not 3-shell
+    print(f"Comm for {seed} has size {size} and coreness {shell.score(seed)}")
 
-    seed = {3, 4}
+    seed, size = {3, 4}, 0
     comm = shell.expandOneCommunity(seed)
+    shell.forCommunity(seed, count)
     print(f"Comm for {seed}:", comm)  # 3 is in 3-shell, returns just the 4-clique
+    print(f"Comm for {seed} has size {size} and coreness {shell.score(seed)}")
 
-    seed = {3, 13}
+    seed, size = {3, 13}, 0
     comm = shell.expandOneCommunity(seed)
+    shell.forCommunity(seed, count)
     print(f"Comm for {seed}:", comm)  # 3, 13 are connected in 2-shell (but not 3-shell)
+    print(f"Comm for {seed} has size {size} and coreness {shell.score(seed)}")
 
     if not components.exists() or not tree.exists():
         shell.save(components, tree, compression="ZSTD")

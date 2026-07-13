@@ -13,6 +13,24 @@ from .helpers import stdstring
 
 import os
 
+cdef extern from "cython_helper.h":
+	void throw_runtime_error(string message)
+
+cdef cppclass NodeCallbackWrapper:
+	void* callback
+	__init__(object callback):
+		this.callback = <void*>callback
+	void cython_call_operator(node u):
+		cdef bool_t error = False
+		cdef string message
+		try:
+			(<object>callback)(u)
+		except Exception as e:
+			error = True
+			message = stdstring("An Exception occurred, aborting execution of iterator: {0}".format(e))
+		if (error):
+			throw_runtime_error(message)
+
 cdef class SelectiveCommunityDetector:
 	"""
 	Abstract base class for a selective community detector.
@@ -603,6 +621,8 @@ cdef extern from "<networkit/scd/ShellStruct.hpp>":
 		void build() except +
 		void save(string components_path, string tree_path, string compression) except +
 		void load(string components_path, string tree_path) except +
+		int score(set[node] seeds) except +
+		void forCommunity[Callback](set[node] seeds, Callback c) except +
 
 cdef class ShellStruct(SelectiveCommunityDetector):
 	"""
@@ -667,3 +687,36 @@ cdef class ShellStruct(SelectiveCommunityDetector):
 		tree_path = os.fspath(tree_path).encode("utf-8")
 		(<_ShellStruct*>(self._this)).load(components_path, tree_path)
 
+	def score(self, set[node] seeds):
+		"""
+		score()
+
+     	Finding the coreness of a set of seeds is much faster.
+     	This method does that.
+
+		Parameters
+		----------
+     	seeds : set[node]
+     		The seed nodes.
+		"""
+		return (<_ShellStruct*>(self._this)).score(seeds)
+
+	def forCommunity(self, set[node] seeds, object callback):
+		"""
+		forCommunity()
+
+		Apply a callback to all nodes in a community.
+
+		Parameters
+		----------
+     	seeds : set[node]
+     		The seed nodes.
+     	callback : object
+     		Any callable object that takes the parameter node.
+		"""
+		cdef NodeCallbackWrapper* wrapper
+		try:
+			wrapper = new NodeCallbackWrapper(callback)
+			(<_ShellStruct*>(self._this)).forCommunity[NodeCallbackWrapper](seeds, dereference(wrapper))
+		finally:
+			del wrapper

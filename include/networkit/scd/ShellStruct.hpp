@@ -8,11 +8,15 @@
 #ifndef NETWORKIT_SCD_SHELL_STRUCT_HPP_
 #define NETWORKIT_SCD_SHELL_STRUCT_HPP_
 
+#include <concepts>
+#include <functional>
 #include <optional>
+
 #include <networkit/graph/GraphR.hpp>
 #include <networkit/scd/SelectiveCommunityDetector.hpp>
 #include <networkit/structures/LeastCommonAncestor.hpp>
 
+#include "networkit/graph/BFS.hpp"
 #include <arrow/array/array_nested.h>
 #include <arrow/type_fwd.h>
 #include <networkit/Globals.hpp>
@@ -64,6 +68,28 @@ public:
     std::set<node> expandOneCommunity(const std::set<node> &s) override;
 
     /**
+     * Finding the score without instantiating the community is much faster.
+     * This method does that.
+     *
+     * @param[in] seeds seed nodes
+     *
+     * @param[out] the core number of the set
+     */
+    index score(const std::set<node> &s);
+
+    /**
+     * Applies a reduction operator on the output community.
+     * This is usually much faster than instantiating the community explicitly.
+     *
+     * @param[in] seeds seed nodes
+     * @param[in] handle takes parameter <code>(node)</code>.
+     *
+     * @param[out] applying F commutative reduction operator to all v in the community.
+     */
+    template <typename L>
+    void forCommunity(const std::set<node> &s, L handle);
+
+    /**
      * Saves the shellstruct index to disk in .parquet files.
      *
      * @param[in] components_path The assignment of vertices to components.
@@ -83,6 +109,30 @@ public:
     // inherit method from parent class.
     using SelectiveCommunityDetector::expandOneCommunity;
 };
+
+template <typename L>
+void ShellStruct::forCommunity(const std::set<node> &s, L handle) {
+    if (!built)
+        throw std::runtime_error("Need to build() or load() the shell struct");
+
+    if (s.empty())
+        return;
+
+    std::vector<node> query;
+    query.reserve(s.size());
+    for (node u : s)
+        query.push_back(assignment->Value(static_cast<int64_t>(u)));
+
+    const uint64_t *raw_v =
+        std::static_pointer_cast<arrow::UInt64Array>(vertices->values())->raw_values();
+    const int64_t *raw_offsets = vertices->raw_value_offsets();
+
+    node ancestor = lca->Query(std::vector<node>(query.begin(), query.end()));
+    Traversal::BFSfrom(*tree, ancestor, [&](node u) {
+        for (index i = raw_offsets[u]; i < raw_offsets[u + 1]; ++i)
+            handle(raw_v[i]);
+    });
+}
 
 } /* namespace NetworKit */
 #endif // NETWORKIT_SCD_SHELL_STRUCT_HPP_

@@ -253,6 +253,19 @@ std::set<node> ShellStruct::expandOneCommunity(const std::set<node> &s) {
     return std::set<node>(output.begin(), output.end());
 }
 
+count ShellStruct::score(const std::set<node> &s) {
+    if (!built)
+        throw std::runtime_error("Need to build() or load() the shell struct");
+
+    std::vector<node> query;
+    query.reserve(s.size());
+    for (node u : s)
+        query.push_back(assignment->Value(static_cast<int64_t>(u)));
+    node ancestor = lca->Query(std::vector<node>(query.begin(), query.end()));
+
+    return coreness->Value(static_cast<int64_t>(ancestor));
+}
+
 static arrow::Result<arrow::ipc::IpcWriteOptions> makeIpcOptions(const std::string &compression) {
     auto opts = arrow::ipc::IpcWriteOptions::Defaults();
     arrow::Compression::type codec;
