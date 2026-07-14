@@ -5,8 +5,8 @@
  *      Author: Ian Chen (ianchen3@illinois.edu)
  */
 
-#ifndef NETWORKIT_SCD_STEINER_KCORE_HPP_
-#define NETWORKIT_SCD_STEINER_KCORE_HPP_
+#ifndef NETWORKIT_SCD_STEINER_K_CORE_HPP_
+#define NETWORKIT_SCD_STEINER_K_CORE_HPP_
 
 #include <networkit/scd/SelectiveCommunityDetector.hpp>
 
@@ -17,15 +17,18 @@ namespace NetworKit {
  *
  */
 class SteinerKCore : public SelectiveCommunityDetector {
-    std::vector<count> coreness;
+    std::vector<count> ownedCoreness; // for the convenience constructor
+    std::span<const count> coreness;
 
 public:
     /**
      * Constructs the Steiner KCore algorithm.
      *
      * @param[in] G The graph to detect communities on
+     * @param[in] coreness The pre-computed core decomposition for
+          the graph. coreness must be kept alive as long as this is.
      */
-    SteinerKCore(const Graph &g, const std::vector<count> &coreness);
+    SteinerKCore(const Graph &g, std::span<const count> coreness);
 
     SteinerKCore(const Graph &g);
 
@@ -58,4 +61,4 @@ public:
 
 } // namespace NetworKit
 
-#endif // NETWORKIT_SCD_STEINER_KCORE_HPP_
+#endif // NETWORKIT_SCD_STEINER_K_CORE_HPP_

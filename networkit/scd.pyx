@@ -1,9 +1,11 @@
+from libc.stdint cimport uint64_t
 from libcpp cimport bool as bool_t
 from libcpp.map cimport map
 from libcpp.set cimport set
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
 from libcpp.string cimport string
+from libcpp.span cimport span
 
 from cython.operator import dereference
 
@@ -12,6 +14,10 @@ from .structures cimport _Cover, Cover
 from .helpers import stdstring
 
 import os
+
+## workaround of Cython parser
+## this is fixed in v3.3.0a1 (https://github.com/cython/cython/issues/6294)
+ctypedef const uint64_t const_count
 
 cdef extern from "cython_helper.h":
 	void throw_runtime_error(string message)
@@ -724,7 +730,8 @@ cdef class ShellStruct(SelectiveCommunityDetector):
 cdef extern from "<networkit/scd/SteinerKCore.hpp>":
 
 	cdef cppclass _SteinerKCore "NetworKit::SteinerKCore"(_SelectiveCommunityDetector):
-		_SteinerKCore(_Graph &G, vector[node] &coreness) except +
+		_SteinerKCore(_Graph &G) except +
+		_SteinerKCore(_Graph &G, span[const_count] coreness) except +
 		vector[set[node]] run(const vector[set[node]] &s) except +
 
 cdef class SteinerKCore(SelectiveCommunityDetector):
@@ -737,12 +744,23 @@ cdef class SteinerKCore(SelectiveCommunityDetector):
 	----------
 	G : networkit.Graph
 		Graph in which the community shell be found.
-	coreness: list[int]
-		Precalculated core numbers for each node.
+	coreness: numpy.ndarray[uint64], optional
+		Precalculated core numbers for each count.
 	"""
-	def __cinit__(self, Graph G, list[node] coreness):
+	def __cinit__(self, Graph G, coreness=None):
+		cdef const uint64_t[::1] mv
 		self._G = G
-		self._this = new _SteinerKCore(dereference(G._this), coreness)
+
+		if coreness is None:
+			self._this = new _SteinerKCore(dereference(G._this))
+			return
+
+		mv = coreness
+		self._ownedCoreness = coreness
+		if mv.shape[0] == 0:
+			self._this = new _SteinerKCore(dereference(G._this), span[const_count]())
+		else:
+			self._this = new _SteinerKCore(dereference(G._this), span[const_count](&mv[0], <size_t>mv.shape[0]))
 
 	def run(self, list[set[node]] seeds):
 		"""

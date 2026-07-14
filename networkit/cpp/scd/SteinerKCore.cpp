@@ -6,23 +6,24 @@
  */
 
 #include <stdexcept>
-#include "networkit/centrality/CoreDecomposition.hpp"
-#include "networkit/graph/InducedSubgraphView.hpp"
 #include <networkit/auxiliary/BucketPQ.hpp>
+#include <networkit/centrality/CoreDecomposition.hpp>
+#include <networkit/graph/InducedSubgraphView.hpp>
 #include <networkit/scd/SelectiveCommunityDetector.hpp>
 #include <networkit/scd/SteinerKCore.hpp>
 #include <networkit/structures/UnionFindSubset.hpp>
 
 namespace NetworKit {
 
-SteinerKCore::SteinerKCore(const Graph &g, const std::vector<count> &coreness)
+SteinerKCore::SteinerKCore(const Graph &g, std::span<const count> coreness)
     : SelectiveCommunityDetector(g), coreness(coreness) {}
 
 SteinerKCore::SteinerKCore(const Graph &g) : SelectiveCommunityDetector(g) {
     CoreDecomposition cd(g);
     cd.run();
     std::vector<double> scores = cd.scores();
-    coreness = std::vector<count>(scores.begin(), scores.end());
+    ownedCoreness = std::vector<count>(scores.begin(), scores.end());
+    coreness = ownedCoreness;
 }
 
 std::set<node> SteinerKCore::expandOneCommunity(const std::set<node> &s) {

@@ -5,8 +5,8 @@
  *      Author: Ian Chen (ianchen3@illinois.edu)
  */
 
-#ifndef NETWORKIT_SCD_LOCAL_KCORE_HPP_
-#define NETWORKIT_SCD_LOCAL_KCORE_HPP_
+#ifndef NETWORKIT_SCD_LOCAL_K_CORE_HPP_
+#define NETWORKIT_SCD_LOCAL_K_CORE_HPP_
 
 #include <networkit/scd/SelectiveCommunityDetector.hpp>
 
@@ -44,4 +44,4 @@ private:
 
 } // namespace NetworKit
 
-#endif // NETWORKIT_SCD_LOCAL_KCORE_HPP_
+#endif // NETWORKIT_SCD_LOCAL_K_CORE_HPP_
