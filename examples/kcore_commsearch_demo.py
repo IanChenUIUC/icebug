@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import networkit as nk
 from networkit.scd import SteinerKCore, LocalKCore
 
@@ -27,7 +28,7 @@ def main():
     graph, coreness = build_demo_graph()
 
     print("====== Running SteinerKCore ========")
-    commsearch = SteinerKCore(graph, coreness)
+    commsearch = SteinerKCore(graph, np.array(coreness, dtype=np.uint64))
 
     seed = {0, 1, 2}
     print(f"{seed=}:", commsearch.expandOneCommunity(seed))

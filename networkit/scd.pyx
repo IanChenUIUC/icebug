@@ -747,6 +747,10 @@ cdef class SteinerKCore(SelectiveCommunityDetector):
 	coreness: numpy.ndarray[uint64], optional
 		Precalculated core numbers for each count.
 	"""
+	
+	# increment refcount for any coreness
+	cdef object _ownedCoreness
+		
 	def __cinit__(self, Graph G, coreness=None):
 		cdef const uint64_t[::1] mv
 		self._G = G

@@ -39,7 +39,7 @@ public:
     using SelectiveCommunityDetector::expandOneCommunity;
 
 private:
-    const std::string &logFile;
+    std::string logFile;
 };
 
 } // namespace NetworKit
