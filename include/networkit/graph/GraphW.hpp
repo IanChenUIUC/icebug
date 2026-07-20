@@ -3,6 +3,8 @@
 
 #include <set>
 #include <networkit/graph/Graph.hpp>
+#include <networkit/graph/GraphConcepts.hpp>
+#include <networkit/graph/GraphIteratorMixin.hpp>
 
 namespace NetworKit {
 
@@ -15,7 +17,22 @@ namespace NetworKit {
  * GraphW uses traditional vector-based adjacency lists for mutable operations,
  * while the base Graph class uses memory-efficient Arrow CSR arrays.
  */
-class GraphW final : public Graph {
+class GraphW final : public Graph, public GraphIteratorMixin<GraphW> {
+public:
+    static constexpr bool isNetworKitGraph = true;
+
+    // Resolve the iteration API to the mixin's static-dispatch versions (not the
+    // base Graph's virtual std::function path) for concrete-typed callers.
+    using GraphIteratorMixin<GraphW>::forEdges;
+    using GraphIteratorMixin<GraphW>::forEdgesOf;
+    using GraphIteratorMixin<GraphW>::forNeighborsOf;
+    using GraphIteratorMixin<GraphW>::forInEdgesOf;
+    using GraphIteratorMixin<GraphW>::forInNeighborsOf;
+    using GraphIteratorMixin<GraphW>::parallelForEdges;
+    using GraphIteratorMixin<GraphW>::parallelSumForEdges;
+
+private:
+    friend class GraphIteratorMixin<GraphW>;
 
 protected:
     // Vector-based adjacency data structures for mutable operations
@@ -941,6 +958,14 @@ private:
     template <bool graphIsDirected, bool hasWeights, bool graphHasEdgeIds, typename L>
     inline double parallelSumForEdgesImpl(L handle) const;
 
+    // Raw neighbor enumerators required by GraphIteratorMixin. They must not
+    // deduplicate or reorder; the mixin owns undirected dedup and arg order.
+    template <bool weighted, bool edgeIds, typename Cb>
+    inline void forOutEdgesRaw(node u, Cb cb) const;
+
+    template <bool directed, bool weighted, bool edgeIds, typename Cb>
+    inline void forInEdgesRaw(node u, Cb cb) const;
+
     /**
      * @brief Override for vector-based edge iteration
      */
@@ -1230,6 +1255,26 @@ inline double GraphW::parallelSumForEdgesImpl(L handle) const {
 
     return sum;
 }
+
+template <bool weighted, bool edgeIds, typename Cb>
+inline void GraphW::forOutEdgesRaw(node u, Cb cb) const {
+    const auto &nbrs = outEdges[u];
+    for (index i = 0; i < nbrs.size(); ++i)
+        cb(nbrs[i], getOutEdgeWeight<weighted>(u, i), getOutEdgeId<edgeIds>(u, i));
+}
+
+template <bool directed, bool weighted, bool edgeIds, typename Cb>
+inline void GraphW::forInEdgesRaw(node u, Cb cb) const {
+    if constexpr (directed) {
+        const auto &nbrs = inEdges[u];
+        for (index i = 0; i < nbrs.size(); ++i)
+            cb(nbrs[i], getInEdgeWeight<weighted>(u, i), getInEdgeId<edgeIds>(u, i));
+    } else {
+        forOutEdgesRaw<weighted, edgeIds>(u, cb);
+    }
+}
+
+static_assert(GraphType<GraphW>);
 
 } /* namespace NetworKit */
 

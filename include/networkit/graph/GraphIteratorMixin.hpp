@@ -130,21 +130,8 @@ public:
     /** Parallel iteration over all edges (undirected: each once, u <= v). */
     template <typename L>
     void parallelForEdges(L handle) const {
-        dispatchFlags([&]<bool dir, bool wt, bool eid>() {
-            const auto z = static_cast<omp_index>(self().upperNodeIdBound());
-#pragma omp parallel for schedule(guided)
-            for (omp_index u = 0; u < z; ++u) {
-                if (!self().hasNode(static_cast<node>(u)))
-                    continue;
-                self().template forOutEdgesRaw<wt, eid>(
-                    static_cast<node>(u), [&](node v, edgeweight w, edgeid e) {
-                        if constexpr (!dir)
-                            if (v < static_cast<node>(u))
-                                return;
-                        detail::edgeLambda(handle, static_cast<node>(u), v, w, e);
-                    });
-            }
-        });
+        dispatchFlags(
+            [&]<bool dir, bool wt, bool eid>() { parallelForEdgesImpl<dir, wt, eid>(handle); });
     }
 
     /** Parallel reduction (+) over the values returned by the handle for all
@@ -152,21 +139,48 @@ public:
     template <typename L>
     double parallelSumForEdges(L handle) const {
         double sum = 0.0;
-        dispatchFlags([&]<bool dir, bool wt, bool eid>() {
-            const auto z = static_cast<omp_index>(self().upperNodeIdBound());
+        dispatchFlags(
+            [&]<bool dir, bool wt, bool eid>() { sum = parallelSumForEdgesImpl<dir, wt, eid>(handle); });
+        return sum;
+    }
+
+private:
+    // The omp loop must sit directly in the function that owns `handle` (and the
+    // reduction var); clang's OpenMP rejects capturing them across the extra
+    // dispatchFlags lambda layer.
+    template <bool dir, bool wt, bool eid, typename L>
+    void parallelForEdgesImpl(L handle) const {
+        const auto z = static_cast<omp_index>(self().upperNodeIdBound());
+#pragma omp parallel for schedule(guided)
+        for (omp_index u = 0; u < z; ++u) {
+            const node un = static_cast<node>(u);
+            if (!self().hasNode(un))
+                continue;
+            self().template forOutEdgesRaw<wt, eid>(un, [&](node v, edgeweight w, edgeid e) {
+                if constexpr (!dir)
+                    if (v < un)
+                        return;
+                detail::edgeLambda(handle, un, v, w, e);
+            });
+        }
+    }
+
+    template <bool dir, bool wt, bool eid, typename L>
+    double parallelSumForEdgesImpl(L handle) const {
+        double sum = 0.0;
+        const auto z = static_cast<omp_index>(self().upperNodeIdBound());
 #pragma omp parallel for reduction(+ : sum) schedule(guided)
-            for (omp_index u = 0; u < z; ++u) {
-                if (!self().hasNode(static_cast<node>(u)))
-                    continue;
-                self().template forOutEdgesRaw<wt, eid>(
-                    static_cast<node>(u), [&](node v, edgeweight w, edgeid e) {
-                        if constexpr (!dir)
-                            if (v < static_cast<node>(u))
-                                return;
-                        sum += detail::edgeLambda(handle, static_cast<node>(u), v, w, e);
-                    });
-            }
-        });
+        for (omp_index u = 0; u < z; ++u) {
+            const node un = static_cast<node>(u);
+            if (!self().hasNode(un))
+                continue;
+            self().template forOutEdgesRaw<wt, eid>(un, [&](node v, edgeweight w, edgeid e) {
+                if constexpr (!dir)
+                    if (v < un)
+                        return;
+                sum += detail::edgeLambda(handle, un, v, w, e);
+            });
+        }
         return sum;
     }
 };
