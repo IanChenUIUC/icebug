@@ -11,6 +11,7 @@
 
 #include <networkit/centrality/CoreDecomposition.hpp>
 #include <networkit/centrality/DegreeCentrality.hpp>
+#include <networkit/graph/GraphDispatch.hpp>
 
 namespace NetworKit {
 
@@ -28,11 +29,13 @@ CoreDecomposition::CoreDecomposition(const Graph &G, bool normalized,
 }
 
 void CoreDecomposition::run() {
-    if (G.isDirected() || enforceBucketQueueAlgorithm) {
-        runWithBucketQueues();
-    } else {
-        runWithParK();
-    }
+    visitConcreteGraph(G, [&](const auto &g) {
+        if (g.isDirected() || enforceBucketQueueAlgorithm) {
+            runWithBucketQueues(g);
+        } else {
+            runWithParK(g);
+        }
+    });
 
     if (normalized) {
         DegreeCentrality deg(G);
@@ -43,11 +46,12 @@ void CoreDecomposition::run() {
     }
 }
 
-void CoreDecomposition::runWithParK() {
-    count z = G.upperNodeIdBound();
+template <class G>
+void CoreDecomposition::runWithParK(const G &g) {
+    count z = g.upperNodeIdBound();
     scoreData.resize(z); // TODO: move to base class
 
-    count nUnprocessed = G.numberOfNodes();
+    count nUnprocessed = g.numberOfNodes();
     std::vector<node> curr; // currently processed nodes
     std::vector<node> next; // nodes to be processed next
     std::vector<char> active(z, 0);
@@ -56,8 +60,8 @@ void CoreDecomposition::runWithParK() {
 
     // fill in degrees
     std::vector<count> degrees(z);
-    G.parallelForNodes([&](node u) {
-        degrees[u] = G.degree(u);
+    g.parallelForNodes([&](node u) {
+        degrees[u] = g.degree(u);
         active[u] = 1;
     });
 
@@ -76,12 +80,12 @@ void CoreDecomposition::runWithParK() {
             nUnprocessed -= size;
 #ifndef NETWORKIT_OMP2
             if (!canRunInParallel || size <= 256) {
-                processSublevel(level, degrees, curr, next);
+                processSublevel(level, degrees, curr, next, g);
             } else {
-                processSublevelParallel(level, degrees, curr, next, active);
+                processSublevelParallel(level, degrees, curr, next, active, g);
             }
 #else
-            processSublevel(level, degrees, curr, next);
+            processSublevel(level, degrees, curr, next, g);
 #endif
             std::swap(curr, next);
             size = curr.size();
@@ -121,13 +125,15 @@ void CoreDecomposition::scanParallel(index level, const std::vector<count> &degr
     }
 }
 
+template <class G>
 void CoreDecomposition::processSublevel(index level, std::vector<count> &degrees,
-                                        const std::vector<node> &curr, std::vector<node> &next) {
+                                        const std::vector<node> &curr, std::vector<node> &next,
+                                        const G &g) {
     // check for each neighbor of vertices in curr if their updated degree reaches level;
     // if so, process them next
     for (auto u : curr) {
         scoreData[u] = level;
-        G.forNeighborsOf(u, [&](node v) {
+        g.forNeighborsOf(u, [&](node v) {
             if (degrees[v] > level) {
                 degrees[v]--;
                 if (degrees[v] == level) {
@@ -139,10 +145,11 @@ void CoreDecomposition::processSublevel(index level, std::vector<count> &degrees
 }
 
 #ifndef NETWORKIT_OMP2
+template <class G>
 void CoreDecomposition::processSublevelParallel(index level, std::vector<count> &degrees,
                                                 const std::vector<node> &curr,
                                                 std::vector<node> &next,
-                                                std::vector<char> &active) {
+                                                std::vector<char> &active, const G &g) {
     // check for each neighbor of vertices in curr if their updated degree reaches level;
     // if so, process them next
 
@@ -154,7 +161,7 @@ void CoreDecomposition::processSublevelParallel(index level, std::vector<count> 
         node u = curr[i];
         active[u] = 0;
         scoreData[u] = level;
-        G.forNeighborsOf(u, [&](node v) {
+        g.forNeighborsOf(u, [&](node v) {
             if (degrees[v] > level) {
                 index tmp;
 
@@ -175,23 +182,24 @@ void CoreDecomposition::processSublevelParallel(index level, std::vector<count> 
 }
 #endif // NETWORKIT_OMP2
 
-void CoreDecomposition::runWithBucketQueues() {
+template <class G>
+void CoreDecomposition::runWithBucketQueues(const G &g) {
     /* Main data structure: buckets of nodes indexed by their remaining degree. */
-    index z = G.upperNodeIdBound();
-    std::vector<node> queue(G.numberOfNodes());
+    index z = g.upperNodeIdBound();
+    std::vector<node> queue(g.numberOfNodes());
     std::vector<index> nodePtr(z);
-    std::vector<index> degreeBegin(G.numberOfNodes());
+    std::vector<index> degreeBegin(g.numberOfNodes());
     std::vector<count> degree(z); // tracks degree during algo
 
-    bool directed = G.isDirected();
+    bool directed = g.isDirected();
 
     /* Bucket sort  by degree */
     /* 1) bucket sizes */
-    G.forNodes([&](node u) {
-        count deg = G.degree(u);
+    g.forNodes([&](node u) {
+        count deg = g.degree(u);
 
         if (directed) {
-            deg += G.degreeIn(u);
+            deg += g.degreeIn(u);
         }
 
         degree[u] = deg;
@@ -206,7 +214,7 @@ void CoreDecomposition::runWithBucketQueues() {
     }
 
     /* 3) Sort nodes/place them in queue */
-    G.forNodes([&](node u) {
+    g.forNodes([&](node u) {
         count deg = degree[u];
         index pos = degreeBegin[deg];
         ++degreeBegin[deg];
@@ -226,7 +234,7 @@ void CoreDecomposition::runWithBucketQueues() {
     scoreData.resize(z);
 
     /* Main loop: Successively "remove" nodes by setting them not alive after processing them. */
-    for (index i = 0; i < G.numberOfNodes(); ++i) {
+    for (index i = 0; i < g.numberOfNodes(); ++i) {
         node u = queue[i];
         core = std::max(core, degree[u]); // core is maximum of all previously seen degrees
 
@@ -265,10 +273,10 @@ void CoreDecomposition::runWithBucketQueues() {
         };
 
         /* Remove u and its incident edges. */
-        G.forNeighborsOf(u, removeNeighbor);
+        g.forNeighborsOf(u, removeNeighbor);
         if (directed) {
             /* graph is directed */
-            G.forInNeighborsOf(u, removeNeighbor);
+            g.forInNeighborsOf(u, removeNeighbor);
         }
     }
 
@@ -335,5 +343,26 @@ index CoreDecomposition::maxCoreNumber() const {
 double CoreDecomposition::maximum() {
     return static_cast<double>(G.numberOfNodes() - 1);
 }
+
+template void CoreDecomposition::runWithParK<Graph>(const Graph &);
+template void CoreDecomposition::runWithParK<GraphW>(const GraphW &);
+template void CoreDecomposition::runWithBucketQueues<Graph>(const Graph &);
+template void CoreDecomposition::runWithBucketQueues<GraphW>(const GraphW &);
+template void CoreDecomposition::processSublevel<Graph>(index, std::vector<count> &,
+                                                       const std::vector<node> &,
+                                                       std::vector<node> &, const Graph &);
+template void CoreDecomposition::processSublevel<GraphW>(index, std::vector<count> &,
+                                                        const std::vector<node> &,
+                                                        std::vector<node> &, const GraphW &);
+#ifndef NETWORKIT_OMP2
+template void CoreDecomposition::processSublevelParallel<Graph>(index, std::vector<count> &,
+                                                               const std::vector<node> &,
+                                                               std::vector<node> &,
+                                                               std::vector<char> &, const Graph &);
+template void CoreDecomposition::processSublevelParallel<GraphW>(index, std::vector<count> &,
+                                                                const std::vector<node> &,
+                                                                std::vector<node> &,
+                                                                std::vector<char> &, const GraphW &);
+#endif // NETWORKIT_OMP2
 
 } /* namespace NetworKit */

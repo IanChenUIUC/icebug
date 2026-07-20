@@ -1,5 +1,6 @@
 #include <omp.h>
 #include <networkit/centrality/LocalClusteringCoefficient.hpp>
+#include <networkit/graph/GraphDispatch.hpp>
 
 namespace NetworKit {
 
@@ -14,7 +15,13 @@ LocalClusteringCoefficient::LocalClusteringCoefficient(const Graph &G, bool turb
 }
 
 void LocalClusteringCoefficient::run() {
-    count z = G.upperNodeIdBound();
+    visitConcreteGraph(G, [&](const auto &g) { runImpl(g); });
+    hasRun = true;
+}
+
+template <class G>
+void LocalClusteringCoefficient::runImpl(const G &g) {
+    count z = g.upperNodeIdBound();
     scoreData.clear();
     scoreData.resize(z); // $c(u) := \frac{2 \cdot |E(N(u))| }{\deg(u) \cdot ( \deg(u) - 1)}$
 
@@ -23,23 +30,23 @@ void LocalClusteringCoefficient::run() {
 
     if (turbo) {
         auto isOutEdge = [&](node u, node v) {
-            return G.degree(u) > G.degree(v) || (G.degree(u) == G.degree(v) && u < v);
+            return g.degree(u) > g.degree(v) || (g.degree(u) == g.degree(v) && u < v);
         };
 
-        inBegin.resize(G.upperNodeIdBound() + 1);
-        inEdges.resize(G.numberOfEdges());
+        inBegin.resize(g.upperNodeIdBound() + 1);
+        inEdges.resize(g.numberOfEdges());
         index pos = 0;
-        for (index u = 0; u < G.upperNodeIdBound(); ++u) {
+        for (index u = 0; u < g.upperNodeIdBound(); ++u) {
             inBegin[u] = pos;
-            if (G.hasNode(u)) {
-                G.forEdgesOf(u, [&](node v) {
+            if (g.hasNode(u)) {
+                g.forEdgesOf(u, [&](node v) {
                     if (isOutEdge(v, u)) {
                         inEdges[pos++] = v;
                     }
                 });
             }
         }
-        inBegin[G.upperNodeIdBound()] = pos;
+        inBegin[g.upperNodeIdBound()] = pos;
     }
 
     std::vector<std::vector<bool>> nodeMarker(omp_get_max_threads());
@@ -48,8 +55,8 @@ void LocalClusteringCoefficient::run() {
         nm.resize(z, false);
     }
 
-    G.balancedParallelForNodes([&](node u) {
-        count d = G.degree(u);
+    g.balancedParallelForNodes([&](node u) {
+        count d = g.degree(u);
 
         if (d < 2) {
             scoreData[u] = 0.0;
@@ -57,9 +64,9 @@ void LocalClusteringCoefficient::run() {
             size_t tid = omp_get_thread_num();
             count triangles = 0;
 
-            G.forEdgesOf(u, [&](node v) { nodeMarker[tid][v] = true; });
+            g.forEdgesOf(u, [&](node v) { nodeMarker[tid][v] = true; });
 
-            G.forEdgesOf(u, [&](node, node v) {
+            g.forEdgesOf(u, [&](node, node v) {
                 if (turbo) {
                     for (index i = inBegin[v]; i < inBegin[v + 1]; ++i) {
                         node w = inEdges[i];
@@ -68,7 +75,7 @@ void LocalClusteringCoefficient::run() {
                         }
                     }
                 } else {
-                    G.forEdgesOf(v, [&](node, node w) {
+                    g.forEdgesOf(v, [&](node, node w) {
                         if (nodeMarker[tid][w]) {
                             triangles += 1;
                         }
@@ -76,7 +83,7 @@ void LocalClusteringCoefficient::run() {
                 }
             });
 
-            G.forEdgesOf(u, [&](node, node v) { nodeMarker[tid][v] = false; });
+            g.forEdgesOf(u, [&](node, node v) { nodeMarker[tid][v] = false; });
 
             // No division by 2 since triangles are counted twice as well!
             scoreData[u] = (double)triangles / (double)(d * (d - 1));
@@ -84,8 +91,10 @@ void LocalClusteringCoefficient::run() {
                 scoreData[u] *= 2; // in turbo mode, we count each triangle only once
         }
     });
-    hasRun = true;
 }
+
+template void LocalClusteringCoefficient::runImpl<Graph>(const Graph &);
+template void LocalClusteringCoefficient::runImpl<GraphW>(const GraphW &);
 
 double LocalClusteringCoefficient::maximum() {
     return 1.0;

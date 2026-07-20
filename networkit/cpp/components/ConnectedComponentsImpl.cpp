@@ -1,5 +1,6 @@
 #include "ConnectedComponentsImpl.hpp"
 
+#include <networkit/graph/GraphDispatch.hpp>
 #include <networkit/graph/GraphTools.hpp>
 
 namespace NetworKit {
@@ -21,15 +22,22 @@ ConnectedComponentsImpl<WeaklyCC>::ConnectedComponentsImpl(const Graph &G, Parti
 
 template <bool WeaklyCC>
 void ConnectedComponentsImpl<WeaklyCC>::run() {
+    visitConcreteGraph(*G, [&](const auto &g) { runImpl(g); });
+    hasRun = true;
+}
+
+template <bool WeaklyCC>
+template <class G>
+void ConnectedComponentsImpl<WeaklyCC>::runImpl(const G &g) {
     index nComponents = 0;
     count visitedNodes = 0;
 
     std::queue<node> q;
     auto &component = *componentPtr;
-    component.reset(G->upperNodeIdBound(), none);
+    component.reset(g.upperNodeIdBound(), none);
 
     // perform breadth-first searches
-    for (const node u : G->nodeRange()) {
+    for (const node u : g.nodeRange()) {
         if (component[u] != none)
             continue;
 
@@ -52,19 +60,17 @@ void ConnectedComponentsImpl<WeaklyCC>::run() {
             };
 
             // enqueue neighbors, set component
-            G->forNeighborsOf(v, visitNeighbor);
+            g.forNeighborsOf(v, visitNeighbor);
             if (WeaklyCC)
-                G->forInNeighborsOf(v, visitNeighbor);
+                g.forInNeighborsOf(v, visitNeighbor);
 
         } while (!q.empty());
 
         ++nComponents;
 
-        if (visitedNodes == G->numberOfNodes())
+        if (visitedNodes == g.numberOfNodes())
             break;
     }
-
-    hasRun = true;
 }
 
 template <bool WeaklyCC>
@@ -96,6 +102,11 @@ GraphW ConnectedComponentsImpl<WeaklyCC>::extractLargestConnectedComponent(const
 
 template class ConnectedComponentsImpl<false>;
 template class ConnectedComponentsImpl<true>;
+
+template void ConnectedComponentsImpl<false>::runImpl<Graph>(const Graph &);
+template void ConnectedComponentsImpl<false>::runImpl<GraphW>(const GraphW &);
+template void ConnectedComponentsImpl<true>::runImpl<Graph>(const Graph &);
+template void ConnectedComponentsImpl<true>::runImpl<GraphW>(const GraphW &);
 
 } // namespace ConnectedComponentsDetails
 } // namespace NetworKit

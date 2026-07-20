@@ -52,6 +52,9 @@ public:
     double maximum() override;
 
 protected:
+    template <class G>
+    void runImpl(const G &g);
+
     bool turbo;
 };
 

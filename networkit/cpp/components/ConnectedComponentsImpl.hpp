@@ -38,6 +38,9 @@ public:
     static GraphW extractLargestConnectedComponent(const Graph &G, bool compactGraph);
 
 private:
+    template <class G>
+    void runImpl(const G &g);
+
     const Graph *G;
     Partition *componentPtr;
 };
