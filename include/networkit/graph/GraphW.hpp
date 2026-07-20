@@ -1185,7 +1185,7 @@ inline void GraphW::forOutEdgesOfImpl(node u, L handle) const {
         node v = outEdges[u][i];
 
         if (useEdgeInIteration<graphIsDirected>(u, v)) {
-            Graph::edgeLambda<L>(handle, u, v, getOutEdgeWeight<hasWeights>(u, i),
+            detail::edgeLambda(handle, u, v, getOutEdgeWeight<hasWeights>(u, i),
                                  getOutEdgeId<graphHasEdgeIds>(u, i));
         }
     }
@@ -1197,14 +1197,14 @@ inline void GraphW::forInEdgesOfImpl(node u, L handle) const {
         for (index i = 0; i < inEdges[u].size(); i++) {
             node v = inEdges[u][i];
 
-            Graph::edgeLambda<L>(handle, u, v, getInEdgeWeight<hasWeights>(u, i),
+            detail::edgeLambda(handle, u, v, getInEdgeWeight<hasWeights>(u, i),
                                  getInEdgeId<graphHasEdgeIds>(u, i));
         }
     } else {
         for (index i = 0; i < outEdges[u].size(); ++i) {
             node v = outEdges[u][i];
 
-            Graph::edgeLambda<L>(handle, u, v, getOutEdgeWeight<hasWeights>(u, i),
+            detail::edgeLambda(handle, u, v, getOutEdgeWeight<hasWeights>(u, i),
                                  getOutEdgeId<graphHasEdgeIds>(u, i));
         }
     }
@@ -1222,7 +1222,7 @@ inline double GraphW::parallelSumForEdgesImpl(L handle) const {
             // undirected, do not iterate over edges twice
             // {u, v} instead of (u, v); if v == none, u > v is not fulfilled
             if (useEdgeInIteration<graphIsDirected>(u, v)) {
-                sum += Graph::edgeLambda<L>(handle, u, v, getOutEdgeWeight<hasWeights>(u, i),
+                sum += detail::edgeLambda(handle, u, v, getOutEdgeWeight<hasWeights>(u, i),
                                             getOutEdgeId<graphHasEdgeIds>(u, i));
             }
         }
