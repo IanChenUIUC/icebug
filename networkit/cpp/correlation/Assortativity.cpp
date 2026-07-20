@@ -36,8 +36,8 @@ void Assortativity::run() {
     hasRun = true;
 }
 
-template <class G>
-void Assortativity::runImpl(const G &g) {
+template <class Gr>
+void Assortativity::runImpl(const Gr &G) {
     if (nominal) {
         // compact partition so matrix doesn't get unnecessarily large
         Partition P = *partition;
@@ -46,16 +46,16 @@ void Assortativity::runImpl(const G &g) {
         // to nodes of type j
         count k = P.upperBound();
         std::vector<std::vector<double>> E(k, std::vector<double>(k, 0.0));
-        g.forEdges([&](node u, node v) {
+        G.forEdges([&](node u, node v) {
             E[P[u]][P[v]] += 1;
-            if (!g.isDirected() && P[u] != P[v])
+            if (!G.isDirected() && P[u] != P[v])
                 E[P[v]][P[u]] += 1;
         });
         // row and column sums $a_i$ and $b_i$
         std::vector<double> a(k, 0.0);
         std::vector<double> b(k, 0.0);
         // normalize and calculate sums
-        count m = g.numberOfEdges();
+        count m = G.numberOfEdges();
         for (index i = 0; i < k; ++i) {
             for (index j = 0; j < k; ++j) {
                 E[i][j] = E[i][j] / m;
@@ -81,10 +81,10 @@ void Assortativity::runImpl(const G &g) {
         // of connected pairs of nodes r_{xy} := \frac{\sum_{i=1}^n(x_i-\bar x)(y_i-\bar
         // y)}{\sqrt{\sum_{i=1}^n(x_i-\bar x)^2\cdot \sum_{i=1}^n(y_i-\bar y)^2}}
 
-        count m = g.numberOfEdges();
+        count m = G.numberOfEdges();
         double xSum = 0.0;
         double ySum = 0.0;
-        g.forEdges([&](node u, node v) {
+        G.forEdges([&](node u, node v) {
             xSum += (*attribute)[u];
             ySum += (*attribute)[v];
         });
@@ -94,7 +94,7 @@ void Assortativity::runImpl(const G &g) {
         double A = 0.0;
         double B = 0.0;
         double C = 0.0;
-        g.forEdges([&](node u, node v) {
+        G.forEdges([&](node u, node v) {
             double x = ((*attribute)[u] - xMean);
             double y = ((*attribute)[v] - yMean);
             A += x * y;

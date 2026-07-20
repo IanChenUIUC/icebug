@@ -107,16 +107,16 @@ private:
      * ParK is an algorithm by Naga Shailaja Dasari, Ranjan Desh, and Zubair M.
      * See http://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=7004366 for details.
      */
-    template <class G>
-    void runWithParK(const G &g);
+    template <class Gr>
+    void runWithParK(const Gr &g);
 
     /**
      * Perform k-core decomposition of graph passed in constructor.
      * The algorithm is based on a bucket priority queue data structure.
      * It is generally slower than ParK but may be more flexible.
      */
-    template <class G>
-    void runWithBucketQueues(const G &g);
+    template <class Gr>
+    void runWithBucketQueues(const Gr &g);
 
     /**
      * Determines nodes whose remaining degree equals @a level.
@@ -143,9 +143,9 @@ private:
      * @param[inout] next Nodes to be processed next in current level (certain neighbors of nodes in
      * curr).
      */
-    template <class G>
+    template <class Gr>
     void processSublevel(index level, std::vector<count> &degrees, const std::vector<node> &curr,
-                         std::vector<node> &next, const G &g);
+                         std::vector<node> &next, const Gr &g);
 
     /**
      * Processes in parallel nodes (and their neighbors) identified by previous scan.
@@ -155,10 +155,10 @@ private:
      * @param[inout] next Nodes to be processed next in current level (certain neighbors of nodes in
      * curr).
      */
-    template <class G>
+    template <class Gr>
     void processSublevelParallel(index level, std::vector<count> &degrees,
                                  const std::vector<node> &curr, std::vector<node> &next,
-                                 std::vector<char> &active, const G &g);
+                                 std::vector<char> &active, const Gr &g);
 };
 
 } /* namespace NetworKit */

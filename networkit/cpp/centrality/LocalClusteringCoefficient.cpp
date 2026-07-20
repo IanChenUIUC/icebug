@@ -19,8 +19,8 @@ void LocalClusteringCoefficient::run() {
     hasRun = true;
 }
 
-template <class G>
-void LocalClusteringCoefficient::runImpl(const G &g) {
+template <class Gr>
+void LocalClusteringCoefficient::runImpl(const Gr &g) {
     count z = g.upperNodeIdBound();
     scoreData.clear();
     scoreData.resize(z); // $c(u) := \frac{2 \cdot |E(N(u))| }{\deg(u) \cdot ( \deg(u) - 1)}$

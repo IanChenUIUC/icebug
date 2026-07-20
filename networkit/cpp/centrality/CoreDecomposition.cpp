@@ -46,12 +46,12 @@ void CoreDecomposition::run() {
     }
 }
 
-template <class G>
-void CoreDecomposition::runWithParK(const G &g) {
-    count z = g.upperNodeIdBound();
+template <class Gr>
+void CoreDecomposition::runWithParK(const Gr &G) {
+    count z = G.upperNodeIdBound();
     scoreData.resize(z); // TODO: move to base class
 
-    count nUnprocessed = g.numberOfNodes();
+    count nUnprocessed = G.numberOfNodes();
     std::vector<node> curr; // currently processed nodes
     std::vector<node> next; // nodes to be processed next
     std::vector<char> active(z, 0);
@@ -60,8 +60,8 @@ void CoreDecomposition::runWithParK(const G &g) {
 
     // fill in degrees
     std::vector<count> degrees(z);
-    g.parallelForNodes([&](node u) {
-        degrees[u] = g.degree(u);
+    G.parallelForNodes([&](node u) {
+        degrees[u] = G.degree(u);
         active[u] = 1;
     });
 
@@ -80,12 +80,12 @@ void CoreDecomposition::runWithParK(const G &g) {
             nUnprocessed -= size;
 #ifndef NETWORKIT_OMP2
             if (!canRunInParallel || size <= 256) {
-                processSublevel(level, degrees, curr, next, g);
+                processSublevel(level, degrees, curr, next, G);
             } else {
-                processSublevelParallel(level, degrees, curr, next, active, g);
+                processSublevelParallel(level, degrees, curr, next, active, G);
             }
 #else
-            processSublevel(level, degrees, curr, next, g);
+            processSublevel(level, degrees, curr, next, G);
 #endif
             std::swap(curr, next);
             size = curr.size();
@@ -125,10 +125,10 @@ void CoreDecomposition::scanParallel(index level, const std::vector<count> &degr
     }
 }
 
-template <class G>
+template <class Gr>
 void CoreDecomposition::processSublevel(index level, std::vector<count> &degrees,
                                         const std::vector<node> &curr, std::vector<node> &next,
-                                        const G &g) {
+                                        const Gr &g) {
     // check for each neighbor of vertices in curr if their updated degree reaches level;
     // if so, process them next
     for (auto u : curr) {
@@ -145,11 +145,11 @@ void CoreDecomposition::processSublevel(index level, std::vector<count> &degrees
 }
 
 #ifndef NETWORKIT_OMP2
-template <class G>
+template <class Gr>
 void CoreDecomposition::processSublevelParallel(index level, std::vector<count> &degrees,
                                                 const std::vector<node> &curr,
-                                                std::vector<node> &next,
-                                                std::vector<char> &active, const G &g) {
+                                                std::vector<node> &next, std::vector<char> &active,
+                                                const Gr &g) {
     // check for each neighbor of vertices in curr if their updated degree reaches level;
     // if so, process them next
 
@@ -182,8 +182,8 @@ void CoreDecomposition::processSublevelParallel(index level, std::vector<count> 
 }
 #endif // NETWORKIT_OMP2
 
-template <class G>
-void CoreDecomposition::runWithBucketQueues(const G &g) {
+template <class Gr>
+void CoreDecomposition::runWithBucketQueues(const Gr &g) {
     /* Main data structure: buckets of nodes indexed by their remaining degree. */
     index z = g.upperNodeIdBound();
     std::vector<node> queue(g.numberOfNodes());
@@ -349,20 +349,21 @@ template void CoreDecomposition::runWithParK<GraphW>(const GraphW &);
 template void CoreDecomposition::runWithBucketQueues<Graph>(const Graph &);
 template void CoreDecomposition::runWithBucketQueues<GraphW>(const GraphW &);
 template void CoreDecomposition::processSublevel<Graph>(index, std::vector<count> &,
-                                                       const std::vector<node> &,
-                                                       std::vector<node> &, const Graph &);
-template void CoreDecomposition::processSublevel<GraphW>(index, std::vector<count> &,
                                                         const std::vector<node> &,
-                                                        std::vector<node> &, const GraphW &);
+                                                        std::vector<node> &, const Graph &);
+template void CoreDecomposition::processSublevel<GraphW>(index, std::vector<count> &,
+                                                         const std::vector<node> &,
+                                                         std::vector<node> &, const GraphW &);
 #ifndef NETWORKIT_OMP2
 template void CoreDecomposition::processSublevelParallel<Graph>(index, std::vector<count> &,
-                                                               const std::vector<node> &,
-                                                               std::vector<node> &,
-                                                               std::vector<char> &, const Graph &);
-template void CoreDecomposition::processSublevelParallel<GraphW>(index, std::vector<count> &,
                                                                 const std::vector<node> &,
                                                                 std::vector<node> &,
-                                                                std::vector<char> &, const GraphW &);
+                                                                std::vector<char> &, const Graph &);
+template void CoreDecomposition::processSublevelParallel<GraphW>(index, std::vector<count> &,
+                                                                 const std::vector<node> &,
+                                                                 std::vector<node> &,
+                                                                 std::vector<char> &,
+                                                                 const GraphW &);
 #endif // NETWORKIT_OMP2
 
 } /* namespace NetworKit */

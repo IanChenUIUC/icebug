@@ -51,8 +51,8 @@ public:
     double getCoefficient() const;
 
 private:
-    template <class G>
-    void runImpl(const G &g);
+    template <class Gr>
+    void runImpl(const Gr &G);
 
     const Graph *G;
     const std::vector<double> emptyVector;

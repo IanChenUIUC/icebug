@@ -96,10 +96,23 @@ public:
     /** Iterate over the outgoing incident edges of u. */
     template <typename L>
     void forEdgesOf(node u, L handle) const {
-        dispatchFlags([&]<bool dir, bool wt, bool eid>() {
-            self().template forOutEdgesRaw<wt, eid>(
-                u, [&](node v, edgeweight w, edgeid e) { detail::edgeLambda(handle, u, v, w, e); });
-        });
+        // Out-edges are independent of direction, so only the weight/edge-id flags select the
+        // instantiation. Dispatching per call (rather than hoisting) keeps callers' loops out of a
+        // lambda, matching Graph::forEdgesOf and avoiding OpenMP capture issues under clang.
+        switch (self().isWeighted() + 2 * self().hasEdgeIds()) {
+        case 0:
+            forEdgesOfImpl<false, false>(u, handle);
+            break;
+        case 1:
+            forEdgesOfImpl<true, false>(u, handle);
+            break;
+        case 2:
+            forEdgesOfImpl<false, true>(u, handle);
+            break;
+        case 3:
+            forEdgesOfImpl<true, true>(u, handle);
+            break;
+        }
     }
 
     /** Iterate over the (out-)neighbors of u. */
@@ -114,11 +127,32 @@ public:
      */
     template <typename L>
     void forInEdgesOf(node u, L handle) const {
-        dispatchFlags([&]<bool dir, bool wt, bool eid>() {
-            self().template forInEdgesRaw<dir, wt, eid>(u, [&](node vIn, edgeweight w, edgeid e) {
-                detail::edgeLambda(handle, u, vIn, w, e);
-            });
-        });
+        switch (self().isWeighted() + 2 * self().isDirected() + 4 * self().hasEdgeIds()) {
+        case 0:
+            forInEdgesOfImpl<false, false, false>(u, handle);
+            break;
+        case 1:
+            forInEdgesOfImpl<false, true, false>(u, handle);
+            break;
+        case 2:
+            forInEdgesOfImpl<true, false, false>(u, handle);
+            break;
+        case 3:
+            forInEdgesOfImpl<true, true, false>(u, handle);
+            break;
+        case 4:
+            forInEdgesOfImpl<false, false, true>(u, handle);
+            break;
+        case 5:
+            forInEdgesOfImpl<false, true, true>(u, handle);
+            break;
+        case 6:
+            forInEdgesOfImpl<true, false, true>(u, handle);
+            break;
+        case 7:
+            forInEdgesOfImpl<true, true, true>(u, handle);
+            break;
+        }
     }
 
     /** Iterate over the in-neighbors of u. */
@@ -145,6 +179,18 @@ public:
     }
 
 private:
+    template <bool wt, bool eid, typename L>
+    void forEdgesOfImpl(node u, L handle) const {
+        self().template forOutEdgesRaw<wt, eid>(
+            u, [&](node v, edgeweight w, edgeid e) { detail::edgeLambda(handle, u, v, w, e); });
+    }
+
+    template <bool dir, bool wt, bool eid, typename L>
+    void forInEdgesOfImpl(node u, L handle) const {
+        self().template forInEdgesRaw<dir, wt, eid>(
+            u, [&](node vIn, edgeweight w, edgeid e) { detail::edgeLambda(handle, u, vIn, w, e); });
+    }
+
     // The omp loop must sit directly in the function that owns `handle` (and the
     // reduction var); clang's OpenMP rejects capturing them across the extra
     // dispatchFlags lambda layer.

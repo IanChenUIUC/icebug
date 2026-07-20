@@ -27,8 +27,8 @@ void ConnectedComponentsImpl<WeaklyCC>::run() {
 }
 
 template <bool WeaklyCC>
-template <class G>
-void ConnectedComponentsImpl<WeaklyCC>::runImpl(const G &g) {
+template <class Gr>
+void ConnectedComponentsImpl<WeaklyCC>::runImpl(const Gr &g) {
     index nComponents = 0;
     count visitedNodes = 0;
 
