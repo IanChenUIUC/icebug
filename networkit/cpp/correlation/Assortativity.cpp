@@ -9,6 +9,7 @@
 
 #include <networkit/auxiliary/Log.hpp>
 #include <networkit/correlation/Assortativity.hpp>
+#include <networkit/graph/GraphDispatch.hpp>
 
 namespace NetworKit {
 
@@ -31,6 +32,12 @@ Assortativity::Assortativity(const Graph &G, const Partition &partition)
 }
 
 void Assortativity::run() {
+    visitConcreteGraph(*G, [&](const auto &g) { runImpl(g); });
+    hasRun = true;
+}
+
+template <class G>
+void Assortativity::runImpl(const G &g) {
     if (nominal) {
         // compact partition so matrix doesn't get unnecessarily large
         Partition P = *partition;
@@ -39,16 +46,16 @@ void Assortativity::run() {
         // to nodes of type j
         count k = P.upperBound();
         std::vector<std::vector<double>> E(k, std::vector<double>(k, 0.0));
-        G->forEdges([&](node u, node v) {
+        g.forEdges([&](node u, node v) {
             E[P[u]][P[v]] += 1;
-            if (!G->isDirected() && P[u] != P[v])
+            if (!g.isDirected() && P[u] != P[v])
                 E[P[v]][P[u]] += 1;
         });
         // row and column sums $a_i$ and $b_i$
         std::vector<double> a(k, 0.0);
         std::vector<double> b(k, 0.0);
         // normalize and calculate sums
-        count m = G->numberOfEdges();
+        count m = g.numberOfEdges();
         for (index i = 0; i < k; ++i) {
             for (index j = 0; j < k; ++j) {
                 E[i][j] = E[i][j] / m;
@@ -74,10 +81,10 @@ void Assortativity::run() {
         // of connected pairs of nodes r_{xy} := \frac{\sum_{i=1}^n(x_i-\bar x)(y_i-\bar
         // y)}{\sqrt{\sum_{i=1}^n(x_i-\bar x)^2\cdot \sum_{i=1}^n(y_i-\bar y)^2}}
 
-        count m = G->numberOfEdges();
+        count m = g.numberOfEdges();
         double xSum = 0.0;
         double ySum = 0.0;
-        G->forEdges([&](node u, node v) {
+        g.forEdges([&](node u, node v) {
             xSum += (*attribute)[u];
             ySum += (*attribute)[v];
         });
@@ -87,7 +94,7 @@ void Assortativity::run() {
         double A = 0.0;
         double B = 0.0;
         double C = 0.0;
-        G->forEdges([&](node u, node v) {
+        g.forEdges([&](node u, node v) {
             double x = ((*attribute)[u] - xMean);
             double y = ((*attribute)[v] - yMean);
             A += x * y;
@@ -98,8 +105,10 @@ void Assortativity::run() {
         double r = A / std::sqrt(B * C);
         coefficient = r;
     }
-    hasRun = true;
 }
+
+template void Assortativity::runImpl<Graph>(const Graph &);
+template void Assortativity::runImpl<GraphW>(const GraphW &);
 
 double Assortativity::getCoefficient() const {
     return coefficient;
