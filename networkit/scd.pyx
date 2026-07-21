@@ -625,6 +625,7 @@ cdef extern from "<networkit/scd/ShellStruct.hpp>":
 		_ShellStruct(const _Graph& G) except +
 
 		void build() except +
+		void build(span[const_count] coredecomp) except +
 		void save(string components_path, string tree_path, string compression) except +
 		void load(string components_path, string tree_path) except +
 		int score(set[node] seeds) except +
@@ -650,13 +651,24 @@ cdef class ShellStruct(SelectiveCommunityDetector):
 		self._G = G
 		self._this = new _ShellStruct(dereference(G._this))
 
-	def build(self):
+	def build(self, coreness=None):
 		"""
 		build()
 
 		Initializes the ShellStruct.
+
+	    Parameters
+	    ----------
+		coreness: numpy.ndarray[uint64], optional
+			Precalculated core numbers for each count.
 		"""
-		(<_ShellStruct*>(self._this)).build()
+		if coreness is None or coreness.size == 0:
+			(<_ShellStruct*>(self._this)).build()
+			return
+
+		cdef const uint64_t[::1] mv
+		mv = coreness
+		(<_ShellStruct*>(self._this)).build(span[const_count](&mv[0], <size_t>mv.size))
 
 	def save(self, components_path, tree_path, compression="ZSTD"):
 		"""

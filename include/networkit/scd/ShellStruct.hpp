@@ -58,7 +58,7 @@ public:
      * Builds the shell struct.
      */
     void build();
-    void build(const std::shared_ptr<arrow::UInt64Array> &coredecomp);
+    void build(std::span<const count> coredecomp);
 
     /**
      * @param[in] seeds seed nodes
