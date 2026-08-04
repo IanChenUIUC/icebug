@@ -63,6 +63,8 @@ cdef class Graph:
 	# must go through one, or the cached pointers below describe a graph that is no longer held.
 	cdef _seatW(self, shared_ptr[_GraphW] g):
 		self._w = g.get()
+		self._r = NULL
+		self._base = None
 		self._handle = dereference(self._w).asGraph()
 		self._nodeAttrs = &dereference(self._w).nodeAttributes()
 		self._edgeAttrs = &dereference(self._w).edgeAttributes()
@@ -71,18 +73,39 @@ cdef class Graph:
 
 	cdef _seatR(self, shared_ptr[_GraphR] g):
 		self._w = NULL
+		self._r = g.get()
+		self._base = None
 		self._handle = dereference(g).asGraph()
 		self._nodeAttrs = &dereference(g).nodeAttributes()
 		self._edgeAttrs = &dereference(g).edgeAttributes()
 		self._owner = nk_erase[_GraphR](g)
 		return self
 
+	cdef _seatV(self, shared_ptr[_InducedSubgraphView] g, Graph base):
+		self._w = NULL
+		self._r = NULL
+		# The view holds a bare pointer into base, so base has to outlive this seat.
+		self._base = base
+		self._handle = dereference(g).asGraph()
+		self._nodeAttrs = &dereference(g).nodeAttributes()
+		self._edgeAttrs = &dereference(g).edgeAttributes()
+		self._owner = nk_erase[_InducedSubgraphView](g)
+		return self
+
 	cdef const _Graph* _view(self) noexcept nogil:
 		return &self._handle
 
+	def _rejectEdgeIteration(self):
+		# The edge iterator steps each neighborhood by index, and a subgraph view stores no edges,
+		# so it would throw out of a noexcept operator*() and abort. Reject it here instead.
+		if self._base is not None:
+			raise RuntimeError(
+				"iterEdges is not supported on a subgraph view; use realize() or iterate "
+				"iterNodes() and iterNeighbors()")
+
 	cdef _GraphW* _mutable(self) except NULL:
 		if self._w is NULL:
-			raise RuntimeError("this graph is read-only (CSR-backed) and cannot be modified")
+			raise RuntimeError("this graph is read-only (CSR-backed or a subgraph view) and cannot be modified")
 		return self._w
 
 	cdef setThis(self, const _Graph& other):
@@ -882,6 +905,7 @@ cdef class Graph:
 
 		It does not follow the order of edge ids (if present).
 		"""
+		self._rejectEdgeIteration()
 		cdef _Graph view = self._handle
 		cdef _EdgeRange edge_range = view.edgeRange()
 		cdef _EdgeIterator it = edge_range.begin()
@@ -896,6 +920,7 @@ cdef class Graph:
 
 		Iterates over the edges of the graph and their weights.
 		"""
+		self._rejectEdgeIteration()
 		cdef _Graph view = self._handle
 		cdef _EdgeWeightRange edge_weight_range = view.edgeWeightRange()
 		cdef _EdgeWeightIterator it = edge_weight_range.begin()
@@ -1504,6 +1529,171 @@ cdef class Graph:
 		"""
 		dereference(self._mutable()).setWeight(u, v, w)
 		return self
+
+cdef class InducedSubgraphView:
+
+	"""
+	InducedSubgraphView(base, compact=False)
+
+	The subgraph of `base` induced by a set of nodes, without materializing it.
+
+	Nodes are added and removed in batches; the edges are those of `base` with both endpoints in
+	the subset, recomputed on each traversal rather than stored. Only the operations that a
+	:class:`Graph` cannot express live here -- every read goes through :meth:`asGraph`.
+
+	Non-owning: `base` is kept alive by this object and by any graph handed out by
+	:meth:`asGraph`, but the view never copies it.
+
+	Node ids are `base`'s unless the view is compact, in which case a node's id is its rank in
+	:meth:`getNodeSubset` and ids run from 0 to `numberOfNodes() - 1`. Compact ids matter to
+	algorithms that allocate by the upper node id bound.
+
+	Parameters
+	----------
+	base : networkit.Graph
+		The graph to view. May not itself be a view.
+	compact : bool, optional
+		If set to True, ids run 0..n-1 rather than being `base`'s. Default: False
+	"""
+
+	def __cinit__(self, Graph base not None, bool_t compact=False):
+		# The only place that branches on which concrete graph a Graph holds: the view's
+		# constructors take a concrete graph, so that a view of a view cannot be built.
+		if base._w is not NULL:
+			self._this = make_shared[_InducedSubgraphView](dereference(base._w), compact)
+		elif base._r is not NULL:
+			self._this = make_shared[_InducedSubgraphView](dereference(base._r), compact)
+		else:
+			raise TypeError("cannot induce a view on a view")
+		self._base = base
+
+	def __repr__(self):
+		return "networkit.InducedSubgraphView(n={0}, m={1}, compact={2})".format(
+			dereference(self._this).numberOfNodes(),
+			dereference(self._this).numberOfEdges(),
+			dereference(self._this).hasCompactIds())
+
+	@property
+	def base(self):
+		"""
+		The graph being viewed.
+		"""
+		return self._base
+
+	@property
+	def compact(self):
+		"""
+		Whether this view's node ids are 0..n-1 rather than the base graph's.
+		"""
+		return dereference(self._this).hasCompactIds()
+
+	def addNode(self, node u):
+		"""
+		addNode(u)
+
+		Add one node, given as a base-graph id, to the subset.
+
+		Parameters
+		----------
+		u : int
+			A node of the base graph. Ignored if already present or absent from the base graph.
+		"""
+		self.addNodes([u])
+		return self
+
+	def addNodes(self, nodes):
+		"""
+		addNodes(nodes)
+
+		Add nodes, given as base-graph ids, to the subset.
+
+		Parameters
+		----------
+		nodes : list(int)
+			Nodes of the base graph. Ids already present or absent from the base graph are ignored.
+		"""
+		cdef vector[node] cnodes = nodes
+		dereference(self._this).addNodes(cnodes)
+		return self
+
+	def removeNode(self, node u):
+		"""
+		removeNode(u)
+
+		Remove one node, given as a base-graph id, from the subset.
+
+		Parameters
+		----------
+		u : int
+			A node of the base graph. Ignored if not present.
+		"""
+		self.removeNodes([u])
+		return self
+
+	def removeNodes(self, nodes):
+		"""
+		removeNodes(nodes)
+
+		Remove nodes, given as base-graph ids, from the subset.
+
+		Parameters
+		----------
+		nodes : list(int)
+			Nodes of the base graph. Ids not present are ignored.
+		"""
+		cdef vector[node] cnodes = nodes
+		dereference(self._this).removeNodes(cnodes)
+		return self
+
+	def getNodeSubset(self):
+		"""
+		getNodeSubset()
+
+		Returns
+		-------
+		list(int)
+			The subset, always as base-graph ids, in ascending order.
+		"""
+		return dereference(self._this).getNodeSubset()
+
+	def asGraph(self):
+		"""
+		asGraph()
+
+		Returns
+		-------
+		networkit.Graph
+			A read-only graph reading through this view. Reflects later changes to the subset;
+			attempting to modify it raises RuntimeError.
+
+		Notes
+		-----
+		:meth:`Graph.iterEdges` and :meth:`Graph.iterEdgesWeights` raise RuntimeError on the
+		result: they step each neighborhood by index, and a view stores no edges. Use
+		:meth:`realize` for those, or iterate nodes and their neighbors.
+		"""
+		cdef Graph G = Graph.__new__(Graph)
+		return G._seatV(self._this, self._base)
+
+	def realize(self, bool_t compact=False):
+		"""
+		realize(compact=False)
+
+		Materialize an equivalent graph, copying the induced edges out of the base graph.
+
+		Parameters
+		----------
+		compact : bool, optional
+			Whether the result has ids 0..n-1, independently of whether this view does.
+			Default: False
+
+		Returns
+		-------
+		networkit.Graph
+			A writable graph holding its own copy of the induced edges.
+		"""
+		cdef _GraphW G = dereference(self._this).realize(compact)
+		return Graph().setThisFromGraphW(G)
 
 cdef class GraphW:
 	"""

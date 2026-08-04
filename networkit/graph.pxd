@@ -194,6 +194,25 @@ cdef extern from "<networkit/graph/GraphR.hpp>":
 		_NodeAttrMap& nodeAttributes() noexcept
 		_EdgeAttrMap& edgeAttributes() noexcept
 
+cdef extern from "<networkit/graph/InducedSubgraphView.hpp>":
+	# Non-owning: the base graph must outlive the view. The constructors take a concrete graph
+	# rather than a handle, so that a view of a view is rejected at compile time and so that the
+	# non-explicit GraphW(const Graph&) cannot silently copy a base into a dangling temporary.
+	# addNodes/removeNodes take std::span<const node>, which a vector converts to implicitly.
+	cdef cppclass _InducedSubgraphView "NetworKit::InducedSubgraphView":
+		_InducedSubgraphView(const _GraphW& base, bool_t compactIds) except +
+		_InducedSubgraphView(const _GraphR& base, bool_t compactIds) except +
+		const _Graph& asGraph() noexcept
+		_NodeAttrMap& nodeAttributes() noexcept
+		_EdgeAttrMap& edgeAttributes() noexcept
+		void addNodes(vector[node]& nodes) except +
+		void removeNodes(vector[node]& nodes) except +
+		_GraphW realize(bool_t compactIds) except +
+		const vector[node]& getNodeSubset() noexcept
+		count numberOfNodes() noexcept
+		count numberOfEdges() noexcept
+		bool_t hasCompactIds() noexcept
+
 cdef extern from "<networkit/graph/Graph.hpp>" namespace "NetworKit":
 	# Parameterized on the handle rather than on the concrete graph, so every arm's attribute
 	# maps have this one type. Reaching an attribute therefore never depends on which arm is
@@ -412,9 +431,13 @@ cdef class Graph:
 	cdef _NodeAttrMap *_nodeAttrs
 	cdef _EdgeAttrMap *_edgeAttrs
 	cdef _GraphW *_w  # non-NULL exactly when this graph can be written
+	cdef _GraphR *_r  # non-NULL exactly when this graph is CSR-backed
+	# The graph a seated view reads from, kept alive here because the view only points at it.
+	cdef object _base
 	cdef dict _arrow_arrays
 	cdef _seatW(self, shared_ptr[_GraphW] g)
 	cdef _seatR(self, shared_ptr[_GraphR] g)
+	cdef _seatV(self, shared_ptr[_InducedSubgraphView] g, Graph base)
 	cdef const _Graph* _view(self) noexcept nogil
 	cdef _GraphW* _mutable(self) except NULL
 	cdef setThis(self, const _Graph& other)
@@ -423,6 +446,10 @@ cdef class Graph:
 cdef class GraphW:
 	cdef _GraphW _this
 	cdef setThis(self, _GraphW& other)
+
+cdef class InducedSubgraphView:
+	cdef shared_ptr[_InducedSubgraphView] _this
+	cdef Graph _base
 
 cdef class NodeIntAttribute:
 	cdef _NodeIntAttribute _this
