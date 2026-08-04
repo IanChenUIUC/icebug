@@ -9,7 +9,10 @@
 
 #include <iterator>
 #include <tuple>
+#include <type_traits>
 #include <utility>
+
+#include <networkit/Globals.hpp>
 
 namespace NetworKit {
 
@@ -210,6 +213,54 @@ public:
     bool operator!=(const NeighborWeightIdIteratorBase &rhs) const { return !(*this == rhs); }
 
     value_type operator*() const { return value_type(*elementIter, *weightIter, *idIter); }
+};
+
+class InducedSubgraphView;
+
+/**
+ * Class to iterate over the subset members among one node's neighbors in an induced subgraph view.
+ *
+ * Positioned by an index into the base graph's neighborhood rather than by an iterator into it, so
+ * that the type can be named without the view. A view is an arm of ReferenceGraph, and
+ * ReferenceGraph::NeighborIterator lists one iterator type per arm; were this built out of the
+ * base's neighbor iterator, that alias would be defined in terms of itself. The cost is an
+ * out-of-line call per step, which is why the callback iteration does not use this.
+ *
+ * Dereferencing yields local ids, so a caller never sees the base graph's numbering.
+ */
+template <bool Weighted>
+class ViewNeighborIterator {
+public:
+    using value_type = std::conditional_t<Weighted, std::pair<node, edgeweight>, node>;
+    using reference = value_type;
+    using pointer = void;
+    using iterator_category = std::forward_iterator_tag;
+    using difference_type = ptrdiff_t;
+
+    ViewNeighborIterator() = default;
+
+    /// @a i must be the position of a subset member, or none for the end.
+    ViewNeighborIterator(const InducedSubgraphView *view, node baseNode, bool incoming, index i)
+        : view(view), baseNode(baseNode), i(i), incoming(incoming) {}
+
+    value_type operator*() const;
+    ViewNeighborIterator &operator++();
+
+    ViewNeighborIterator operator++(int) {
+        auto tmp = *this;
+        ++*this;
+        return tmp;
+    }
+
+    /// Only iterators over the same neighborhood are comparable, so the position decides.
+    bool operator==(const ViewNeighborIterator &other) const noexcept { return i == other.i; }
+    bool operator!=(const ViewNeighborIterator &other) const noexcept { return i != other.i; }
+
+private:
+    const InducedSubgraphView *view = nullptr;
+    node baseNode = none;
+    index i = none;
+    bool incoming = false;
 };
 
 } // namespace NetworKit

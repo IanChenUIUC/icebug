@@ -24,6 +24,7 @@ namespace NetworKit {
 
 class GraphR;
 class GraphW;
+class InducedSubgraphView;
 
 /**
  * A handle to some concrete graph, resolved statically rather than through a vtable.
@@ -33,7 +34,7 @@ class GraphW;
  * the concrete type.
  */
 class ReferenceGraph {
-    std::variant<const GraphW *, const GraphR *> arm_;
+    std::variant<const GraphW *, const GraphR *, const InducedSubgraphView *> arm_;
 
 public:
     using NodeIterator = NodeIteratorBase<ReferenceGraph>;
@@ -100,12 +101,12 @@ public:
 
     using NeighborIterator =
         ErasedNeighborIterator<node, NeighborIteratorBase<std::vector<node>::const_iterator>,
-                               NeighborIteratorBase<const node *>>;
+                               NeighborIteratorBase<const node *>, ViewNeighborIterator<false>>;
     using NeighborWeightIterator = ErasedNeighborIterator<
         std::pair<node, edgeweight>,
         NeighborWeightIteratorBase<std::vector<node>::const_iterator,
                                    std::vector<edgeweight>::const_iterator>,
-        NeighborWeightIteratorBase<const node *, const edgeweight *>>;
+        NeighborWeightIteratorBase<const node *, const edgeweight *>, ViewNeighborIterator<true>>;
 
     /// The neighbors of a node, borrowed from the arm's own storage; nothing is copied.
     template <bool InEdges = false>
@@ -148,6 +149,7 @@ public:
      */
     explicit ReferenceGraph(const GraphW &g) noexcept : arm_(&g) {}
     explicit ReferenceGraph(const GraphR &g) noexcept : arm_(&g) {}
+    explicit ReferenceGraph(const InducedSubgraphView &g) noexcept : arm_(&g) {}
 
     /// Calls @a f with a reference to the concrete graph, instantiating it once per arm.
     template <typename Fn>

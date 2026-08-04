@@ -19,6 +19,7 @@
 #include <networkit/graph/GraphR.hpp>
 #include <networkit/graph/GraphTypes.hpp>
 #include <networkit/graph/GraphW.hpp>
+#include <networkit/graph/InducedSubgraphViewImpl.hpp>
 #include <networkit/graph/ReferenceGraphImpl.hpp>
 
 namespace NetworKit {

@@ -15,6 +15,7 @@
 #include <networkit/graph/GraphIteration.hpp>
 #include <networkit/graph/GraphR.hpp>
 #include <networkit/graph/GraphW.hpp>
+#include <networkit/graph/InducedSubgraphView.hpp>
 #include <networkit/graph/ReferenceGraph.hpp>
 
 namespace NetworKit {

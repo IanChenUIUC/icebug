@@ -1,5 +1,6 @@
 networkit_add_module(graph
     GraphR.cpp
+    InducedSubgraphView.cpp
     GraphBuilder.cpp
     GraphTools.cpp
     GraphW.cpp
