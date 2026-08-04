@@ -43,7 +43,7 @@ jobs:
             cxx: clang++-20
           - os: macos
             compiler: llvm-20
-            runner: macos-latest
+            runner: macos-15
             cc: /opt/homebrew/opt/llvm@20/bin/clang
             cxx: /opt/homebrew/opt/llvm@20/bin/clang++
           - os: windows
@@ -89,7 +89,7 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
           sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
           sudo apt-get update
-          sudo apt-get install -y clang-20 libomp-20-dev ninja-build libarrow-dev=23.0.1-1
+          sudo apt-get install -y clang-20 libomp-20-dev ninja-build libarrow-dev=25.0.0-1
 
       - name: Install prerequisites (Linux)
         if: matrix.os == 'linux' && matrix.compiler == 'gcc-14'
@@ -97,7 +97,7 @@ jobs:
           wget https://apache.jfrog.io/artifactory/arrow/ubuntu/apache-arrow-apt-source-latest-noble.deb
           sudo apt-get install -y ./apache-arrow-apt-source-latest-noble.deb
           sudo apt-get update
-          sudo apt-get install -y g++-14 ninja-build libarrow-dev=23.0.1-1
+          sudo apt-get install -y g++-14 ninja-build libarrow-dev=25.0.0-1
 
       - name: Install prerequisites (macOS)
         if: matrix.os == 'macos'
@@ -182,6 +182,11 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           uv sync --extra pytest
+          uv pip install -e ".[test]"
+          # https://github.com/apache/arrow/issues/50648
+          sys_libarrow=$(ldconfig -p | grep libarrow.so.2500 | awk '{print $NF}')
+          sudo apt remove libarrow2500 -y
+          sudo cp $(find .venv -name 'libarrow.so.2500') ${sys_libarrow}
           uv run pytest
         env:
           CMAKE_CXX_COMPILER_LAUNCHER: ccache
@@ -214,7 +219,7 @@ jobs:
           - os: macos
             arch: arm64
             compiler: llvm-20
-            runner: macos-latest
+            runner: macos-15
             cc: /opt/homebrew/opt/llvm@20/bin/clang
             cxx: /opt/homebrew/opt/llvm@20/bin/clang++
             artifact_name: icebug-macos-arm64

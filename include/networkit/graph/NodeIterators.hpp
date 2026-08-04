@@ -72,7 +72,7 @@ public:
         return tmp;
     }
 
-    NodeIteratorBase &operator--() {
+    NodeIteratorBase operator--() {
         assert(u);
         do {
             --u;
@@ -106,6 +106,9 @@ class NodeRangeBase {
 
 public:
     NodeRangeBase(const GraphType &G) : G(&G) {}
+
+    /// Deleted for the same reason as EdgeTypeRange's: the range stores a pointer.
+    NodeRangeBase(GraphType &&) = delete;
 
     NodeRangeBase() : G(nullptr) {};
 

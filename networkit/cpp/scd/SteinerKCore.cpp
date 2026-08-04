@@ -31,10 +31,14 @@ std::set<node> SteinerKCore::expandOneCommunity(const std::set<node> &s) {
 }
 
 count SteinerKCore::queryCoreness(const std::set<node> &s) {
-    InducedSubgraphView subg(*g, expandOneCommunity(s));
-    count retval = none;
-    subg.forNodes([&](node u) { retval = std::min(retval, subg.degree(u)); });
-    return retval;
+    const auto &comm = expandOneCommunity(s);
+    count minDeg = comm.size(); // trivial upper bound
+    for (node u : comm) {
+        count deg = 0;
+        g->forNeighborsOf(u, [&](node v) { deg += comm.contains(v); });
+        minDeg = std::min(minDeg, deg);
+    }
+    return minDeg;
 }
 
 template <class Key, class Value, class F>
