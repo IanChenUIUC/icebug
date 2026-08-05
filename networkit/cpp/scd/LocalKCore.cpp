@@ -6,6 +6,7 @@
  */
 
 #include <algorithm>
+#include <bit>
 #include <networkit/centrality/CoreDecomposition.hpp>
 #include <networkit/graph/InducedSubgraphView.hpp>
 #include <networkit/scd/LocalKCore.hpp>
@@ -94,9 +95,9 @@ count hindex(const Graph &g, node u, const std::unordered_map<node, data_t> &can
     buf.resize(g.degree(u) + 1); // zero-out
 
     g.forNeighborsOf(u, [&](node v) {
-        if (!candidates.contains(v))
-            return;
-        ++buf[std::min(candidates.at(v).upper, g.degree(u))];
+        auto it = candidates.find(v);
+        if (it != candidates.end())
+            ++buf[std::min(it->second.upper, g.degree(u))];
     });
     count sum = 0, retval = g.degree(u);
     do {
@@ -106,12 +107,10 @@ count hindex(const Graph &g, node u, const std::unordered_map<node, data_t> &can
 }
 
 std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
-    // perf: contains() and then at() is redundant
-
     std::unordered_map<node, data_t> candidates;
     std::vector<bool> removed(g->upperNodeIdBound()); // whether its been pruned out or not
     count lower_bound = 0;                            // lower bound on coreness of s
-    count potential, potential_old = 0;
+    count potential = 0, potential_old = 0;
 
     // store the priority queue based on largest incidence
     Aux::BucketPQ pq(g->numberOfNodes(), 0, static_cast<int64_t>(g->numberOfNodes()) - 1);
@@ -119,9 +118,10 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     auto init_data = [&](node u) -> data_t {
         count support = 0, nbrs = 0;
         g->forNeighborsOf(u, [&](node v) {
-            count other_ub = candidates.contains(v) ? candidates.at(v).upper : g->degree(v);
+            auto it = candidates.find(v);
+            count other_ub = it != candidates.end() ? it->second.upper : g->degree(v);
             support += other_ub >= g->degree(u);
-            nbrs += candidates.contains(v) || removed[v];
+            nbrs += it != candidates.end() || removed[v];
         });
         return data_t{.upper = g->degree(u), .support = support, .nbrs = nbrs};
     };
@@ -155,16 +155,22 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     std::vector<count> buf;
     while (!pq.empty()) {
         node u = pq.extractMax().second;
+        if (g->degree(u) < lower_bound) {
+            removed[u] = true;
+            continue;
+        }
+
         auto u_data = candidates[u] = init_data(u);
-        potential += g->degree(u) * g->degree(u); // n<k^2>
+        potential += u_data.nbrs; // FIXME
 
         g->forNeighborsOf(u, add_to_pq);
 
         // trigger all updates of upper bounds
         g->forNeighborsOf(u, [&](node v) {
-            if (removed[v] || !candidates.contains(v))
+            auto it = candidates.find(v);
+            if (removed[v] || it == candidates.end())
                 return;
-            auto &data = candidates.at(v);
+            auto &data = it->second;
             data.support += data.upper >= u_data.upper;
             if ((data.nbrs++ == g->degree(v) - 1) && (data.support < data.upper) && !inQueue[v]) {
                 triggerUpper.push_back(v);
@@ -172,6 +178,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
             }
         });
 
+        // do tightening of upper bounds
         while (!triggerUpper.empty()) {
             node v = triggerUpper.front();
             triggerUpper.pop_front();
@@ -185,7 +192,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
                 removed[v] = true;
                 candidates.erase(v);
                 knew = 0;
-                potential += g->degree(v) * g->degree(v); // n<k^2>
+                potential += u_data.nbrs; // FIXME: n<k^2>
 
                 // update priority queue
                 g->forNeighborsOf(v, [&](node w) {
@@ -195,9 +202,10 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
 
                 // trigger upper on ony neighors
                 g->forNeighborsOf(v, [&](node w) {
-                    if (removed[w] || !candidates.contains(w))
+                    auto it = candidates.find(w);
+                    if (removed[w] || it == candidates.end())
                         return;
-                    auto &data = candidates.at(w);
+                    auto &data = it->second;
                     if (knew < data.upper && data.upper <= kold && --data.support < data.upper
                         && !inQueue[w]) {
                         triggerUpper.push_back(w);
@@ -205,23 +213,32 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
                     }
                 });
             }
-
-            // trigger lower bounds
-            if (2ULL * potential >= 3ULL * potential_old) {
-                potential_old = potential;
-
-                std::vector<node> nodes;
-                nodes.reserve(candidates.size());
-                for (auto [k, _] : candidates)
-                    nodes.push_back(k);
-
-                auto subg = makeSubgraph(*g, nodes);
-                std::set<node> query;
-                for (node v : s)
-                    query.insert(subg.toLocalId(v));
-                lower_bound = SteinerKCore(subg).queryCoreness(query);
-            }
         }
+
+        // trigger lower bounds
+        if (2ULL * potential >= 4ULL * potential_old) {
+            potential_old = potential;
+
+            std::vector<node> nodes;
+            nodes.reserve(candidates.size());
+            for (auto [k, _] : candidates)
+                nodes.push_back(k);
+
+            auto subg = makeSubgraph(*g, nodes);
+            std::set<node> query;
+            for (node v : s)
+                query.insert(subg.toLocalId(v));
+            lower_bound = SteinerKCore(subg).queryCoreness(query);
+
+            DEBUG("LocalKCore updating lower bound; lower=", lower_bound,
+                  " candidates.size()=", candidates.size(), " queue.size()=", pq.size());
+        }
+    }
+
+    if (Aux::Log::isLogLevelEnabled(Aux::Log::LogLevel::INFO)) {
+        count good = candidates.size();
+        count bad = std::count_if(removed.begin(), removed.end(), [](bool u) { return u; });
+        INFO("LocalKCore finished expansion; considered ", good + bad, "final candidates = ", good);
     }
 
     std::vector<node> nodes;

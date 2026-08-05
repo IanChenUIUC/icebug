@@ -53,7 +53,15 @@ bool GraphR::checkConsistency() const {
         && static_cast<int64_t>(inEdgesCSRIndptr->length()) != static_cast<int64_t>(z) + 1) {
         return false;
     }
-    return true;
+    std::atomic_bool stop = false;
+    parallelForNodes([&](node u) {
+        auto [nbr, degree] = getCSROutNeighbors(u);
+        auto span = std::span<const node>(nbr, degree);
+        if (!stop
+            && !(std::is_sorted(span.begin(), span.end()) && 0 <= span[0] && span[degree - 1] < z))
+            stop = true;
+    });
+    return !stop;
 }
 
 index GraphR::findInAdjacency(const std::shared_ptr<arrow::UInt64Array> &indptr,
