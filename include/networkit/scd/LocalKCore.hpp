@@ -24,6 +24,7 @@ struct TriggerStats {
     count potential;     // neighborhoods scanned so far, weighted by degree
     count numExplored;   // nodes that have ever been a candidate
     count numCandidates; // nodes that are currently a candidate
+    count maxCandidates; // max number of nodes at a time that are candidate
     count numRemoved;    // nodes proven to be outside the community
     count lower;         // lower bound on the coreness of the query
     count upper;         // upper bound on the coreness of the query

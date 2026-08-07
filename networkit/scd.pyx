@@ -803,6 +803,7 @@ cdef extern from "<networkit/scd/LocalKCore.hpp>":
 		uint64_t potential
 		uint64_t numExplored
 		uint64_t numCandidates
+		uint64_t maxCandidates
 		uint64_t numRemoved
 		uint64_t lower
 		uint64_t upper

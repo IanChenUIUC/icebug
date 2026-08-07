@@ -147,6 +147,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     count lower_bound = 0; // lower bound on coreness of s
     count outVolume = 0, numRemoved = 0;
     count potential = 0, potential_old = 1;
+    count numCandidates = 0, maxCandidates = 0;
 
     auto check = [](bool ok, const char *what) {
         if (!ok)
@@ -178,6 +179,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
 
         count old = g->degree(v);
         if (d.state == State::candidate) {
+            --numCandidates;
             old = d.upper;
             outVolume -= g->degree(v);
 
@@ -200,6 +202,8 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     // admit this node as a candidate
     auto explore = [&](node u) {
         assert(data[u].state == State::unseen);
+        ++numCandidates;
+        maxCandidates = std::max(maxCandidates, numCandidates);
 
         count h = g->degree(u), support = g->degree(u);
         if (tightenUpper) {
@@ -242,7 +246,7 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
     // trigger lower bounds
     auto triggerLower = [&]() {
         std::vector<node> nodes;
-        nodes.reserve(explored.size());
+        nodes.reserve(numCandidates);
         for (node v : explored)
             if (data[v].state == State::candidate)
                 nodes.push_back(v);
@@ -265,7 +269,8 @@ std::set<node> LocalKCore::expandOneCommunity(const std::set<node> &s) {
                                      .outVolume = outVolume,
                                      .potential = potential,
                                      .numExplored = explored.size(),
-                                     .numCandidates = subg.numberOfNodes(),
+                                     .numCandidates = numCandidates,
+                                     .maxCandidates = maxCandidates,
                                      .numRemoved = numRemoved,
                                      .lower = k,
                                      .upper = upper});
