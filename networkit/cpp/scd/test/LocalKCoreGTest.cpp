@@ -115,56 +115,56 @@ protected:
 TEST_F(LocalKCoreGTest, SeparatedCores_Singleton) {
     std::vector<count> cliques{4, 3, 4};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifySingletons(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, SeparatedCores_Pairs) {
     std::vector<count> cliques{4, 3, 4};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifyPairs(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, BridgedCore_Singleton) {
     std::vector<count> cliques{3, 4, 3};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifySingletons(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, BridgedCore_Pairs) {
     std::vector<count> cliques{3, 4, 3};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifyPairs(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, Medium_Singleton) {
     std::vector<count> cliques{3, 5, 4, 3, 6, 5, 4, 6, 3};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifySingletons(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, Medium_Pairs) {
     std::vector<count> cliques{3, 5, 4, 3, 6, 5, 4, 6, 3};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifyPairs(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, Large_Singleton) {
     std::vector<count> cliques{3, 4, 5, 6, 5, 4, 3, 5, 7, 9, 11, 9, 7, 5, 3, 4, 5, 6, 4, 3};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifySingletons(local, cliques);
 }
 
 TEST_F(LocalKCoreGTest, LargePairs) {
     std::vector<count> cliques{3, 4, 5, 6, 5, 4, 3, 5, 7, 9, 11, 9, 7, 5, 3, 4, 5, 6, 4, 3};
     GraphW g = getCliqueChain(cliques);
-    LocalKCore local(g);
+    LocalKCore local(g, true);
     verifyPairs(local, cliques, true);
 }
 

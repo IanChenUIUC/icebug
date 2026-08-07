@@ -797,12 +797,23 @@ cdef class SteinerKCore(SelectiveCommunityDetector):
 		return (<_SteinerKCore*>self._this).run(<vector[set[node]]>seeds)
 
 cdef extern from "<networkit/scd/LocalKCore.hpp>":
+	cdef struct _TriggerStats "NetworKit::TriggerStats":
+		uint64_t inducedVolume
+		uint64_t outVolume
+		uint64_t potential
+		uint64_t numExplored
+		uint64_t numCandidates
+		uint64_t numRemoved
+		uint64_t lower
+		uint64_t upper
+
 	cdef cppclass _LocalKCore "NetworKit::LocalKCore"(_SelectiveCommunityDetector):
-		_LocalKCore(_Graph G) except +
+		_LocalKCore(_Graph G, bool_t maximal, bool_t tightenUpper) except +
+		vector[_TriggerStats] getTriggerStats() except +
 
 cdef class LocalKCore(SelectiveCommunityDetector):
 	"""
-	LocalKCore(G)
+	LocalKCore(G, maximal=False, tightenUpper=True)
 
 	The Local KCore algorithm.
 
@@ -810,7 +821,26 @@ cdef class LocalKCore(SelectiveCommunityDetector):
 	----------
 	G : networkit.Graph
 		Graph in which the community shell be found.
+	maximal : bool, optional
+		Whether to return the largest community. Default: False
+	tightenUpper : bool, optional
+		Whether to maintain h-index upper bounds on the coreness. When False, pruning falls
+		back to the degree, which is always a valid bound. Default: True
 	"""
-	def __cinit__(self, Graph G):
+	def __cinit__(self, Graph G, bool_t maximal=True, bool_t tightenUpper=False):
 		self._G = G
-		self._this = new _LocalKCore(dereference(G._view()))
+		self._this = new _LocalKCore(dereference(G._view()), maximal, tightenUpper)
+
+	def getTriggerStats(self):
+		"""
+		getTriggerStats()
+
+		The trace of the last call to expandOneCommunity(), one entry per recomputation of
+		the lower bound.
+
+		Returns
+		-------
+		list(dict)
+			The state of the search at each recomputation.
+		"""
+		return (<_LocalKCore*>self._this).getTriggerStats()
