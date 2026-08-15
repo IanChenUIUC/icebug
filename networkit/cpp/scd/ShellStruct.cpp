@@ -71,6 +71,13 @@ static void append_to_csr(std::vector<Index> &indptr, std::vector<node> &indices
     }
 }
 
+static GraphR graphFromChildren(const std::shared_ptr<arrow::LargeListArray> &children) {
+    count n = children->length();
+    auto treeIndptr = std::make_shared<arrow::UInt64Array>(n + 1, children->value_offsets());
+    auto treeIndices = std::static_pointer_cast<arrow::UInt64Array>(children->values());
+    return GraphR(n, true, treeIndices, treeIndptr);
+}
+
 ShellStruct::ShellStruct(const Graph &g) : SelectiveCommunityDetector(g), built(false) {}
 
 void ShellStruct::build() {
@@ -210,9 +217,13 @@ void ShellStruct::build(std::span<const count> coredecomp) {
 
     // Final Phase: convert to member types
 
-    treeIndptr = Aux::vectorToArrow<indptr, arrow::UInt64Array>(tree_c_indptr);
-    treeIndices = Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(tree_c);
-    tree = GraphR(next_id, true, treeIndices, treeIndptr);
+    auto child_offsets_arr = Aux::vectorToArrow<indptr, arrow::Int64Array>(tree_c_indptr);
+    auto tree_c_arr = Aux::vectorToArrow<uint64_t, arrow::UInt64Array>(tree_c);
+    if (!tree_c_arr)
+        tree_c_arr = std::make_shared<arrow::UInt64Array>(0, nullptr);
+    children = std::static_pointer_cast<arrow::LargeListArray>(
+        arrow::LargeListArray::FromArrays(*child_offsets_arr, *tree_c_arr).ValueOrDie());
+    tree = graphFromChildren(children);
     lca = std::make_unique<NetworKit::LeastCommonAncestor>(*tree, root);
 
     auto offsets_arr = Aux::vectorToArrow<indptr, arrow::Int64Array>(tree_v_indptr);
@@ -321,21 +332,12 @@ arrow::Status ShellStruct::saveInternal(const std::string &components_path,
         auto schema = arrow::schema({
             arrow::field("coreness", arrow::uint64()),
             arrow::field("vertices", arrow::large_list(arrow::uint64())),
-            arrow::field("csr_indptr", arrow::uint64()),
-            arrow::field("csr_indices", arrow::uint64()),
+            arrow::field("children", arrow::large_list(arrow::uint64())),
         });
-        auto indptr = std::static_pointer_cast<arrow::UInt64Array>(
-            treeIndptr->Slice(0, treeIndptr->length() - 1));
-        arrow::UInt64Builder builder;
-        ARROW_RETURN_NOT_OK(builder.AppendValues(treeIndices->raw_values(), treeIndices->length()));
-        ARROW_RETURN_NOT_OK(builder.AppendNull());
-        std::shared_ptr<arrow::Array> indices;
-        ARROW_RETURN_NOT_OK(builder.Finish(&indices));
         auto table = arrow::Table::Make(schema, {
                                                     std::make_shared<arrow::ChunkedArray>(coreness),
                                                     std::make_shared<arrow::ChunkedArray>(vertices),
-                                                    std::make_shared<arrow::ChunkedArray>(indptr),
-                                                    std::make_shared<arrow::ChunkedArray>(indices),
+                                                    std::make_shared<arrow::ChunkedArray>(children),
                                                 });
         ARROW_RETURN_NOT_OK(writeTable(table, tree_path, compression));
     }
@@ -360,45 +362,28 @@ arrow::Status ShellStruct::loadInternal(const std::string &components_path,
         std::shared_ptr<arrow::Table> table;
         ARROW_RETURN_NOT_OK(readTable(tree_path, &table));
 
-        auto load_uint64 = [&](const std::string &name,
-                               std::shared_ptr<arrow::UInt64Array> &out) -> arrow::Status {
+        auto load_column =
+            [&](const std::string &name) -> arrow::Result<std::shared_ptr<arrow::Array>> {
             auto col = table->GetColumnByName(name);
             if (!col)
                 return arrow::Status::Invalid("tree file missing '" + name + "' column");
-            ARROW_ASSIGN_OR_RAISE(auto combined,
-                                  arrow::Concatenate(col->chunks(), arrow::default_memory_pool()));
-            out = std::static_pointer_cast<arrow::UInt64Array>(combined);
-            return arrow::Status::OK();
+            return arrow::Concatenate(col->chunks(), arrow::default_memory_pool());
         };
 
-        std::shared_ptr<arrow::UInt64Array> indptr, indices;
-        ARROW_RETURN_NOT_OK(load_uint64("coreness", coreness));
-        ARROW_RETURN_NOT_OK(load_uint64("csr_indptr", indptr));
-        ARROW_RETURN_NOT_OK(load_uint64("csr_indices", indices));
-        treeIndices =
-            std::static_pointer_cast<arrow::UInt64Array>(indices->Slice(0, indices->length() - 1));
-        arrow::UInt64Builder builder;
-        ARROW_RETURN_NOT_OK(builder.AppendValues(indptr->raw_values(), indptr->length()));
-        ARROW_RETURN_NOT_OK(builder.Append(treeIndices->length()));
-        ARROW_RETURN_NOT_OK(builder.Finish(&treeIndptr));
-        {
-            auto col = table->GetColumnByName("vertices");
-            if (!col)
-                return arrow::Status::Invalid("tree file missing 'vertices' column");
-            ARROW_ASSIGN_OR_RAISE(auto combined,
-                                  arrow::Concatenate(col->chunks(), arrow::default_memory_pool()));
-            vertices = std::static_pointer_cast<arrow::LargeListArray>(combined);
-        }
+        ARROW_ASSIGN_OR_RAISE(auto coreness_col, load_column("coreness"));
+        ARROW_ASSIGN_OR_RAISE(auto vertices_col, load_column("vertices"));
+        ARROW_ASSIGN_OR_RAISE(auto children_col, load_column("children"));
+        coreness = std::static_pointer_cast<arrow::UInt64Array>(coreness_col);
+        vertices = std::static_pointer_cast<arrow::LargeListArray>(vertices_col);
+        children = std::static_pointer_cast<arrow::LargeListArray>(children_col);
 
-        count n = treeIndptr->length() - 1;
-        tree.emplace(n, true, treeIndices, treeIndptr);
-
+        count n = children->length();
         node root = none;
         for (node v = 0; v < n && root == none; ++v)
             if (coreness->Value(v) == 0)
                 root = v;
 
-        tree = GraphR(n, true, treeIndices, treeIndptr);
+        tree = graphFromChildren(children);
         lca = std::make_unique<NetworKit::LeastCommonAncestor>(*tree, root);
     }
 

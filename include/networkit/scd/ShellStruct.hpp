@@ -43,8 +43,7 @@ private:
 
     bool built;
     std::optional<GraphR> tree;
-    std::shared_ptr<arrow::UInt64Array> treeIndptr;
-    std::shared_ptr<arrow::UInt64Array> treeIndices;
+    std::shared_ptr<arrow::LargeListArray> children; // tree nodes -> child tree nodes
     std::unique_ptr<NetworKit::LeastCommonAncestor> lca;
 
     arrow::Status saveInternal(const std::string &components_path, const std::string &tree_path,
